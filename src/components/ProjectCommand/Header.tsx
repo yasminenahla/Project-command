@@ -7,12 +7,13 @@ interface Props {
   onTheme:  (v: PCThemeName) => void
   onImport: (file: File) => void
   onExport: () => void
+  onShare:  () => void
   onExit?:  () => void
 }
 
 const THEME_ORDER: PCThemeName[] = ['minimal', 'playful', 'bold']
 
-export default function PCHeader({ theme, onTheme, onImport, onExport, onExit }: Props) {
+export default function PCHeader({ theme, onTheme, onImport, onExport, onShare, onExit }: Props) {
   const t: PCTheme = THEMES[theme]
   const fileRef = useRef<HTMLInputElement>(null)
   const headerIsLight = t.headText === '#FFFFFF'
@@ -72,6 +73,19 @@ export default function PCHeader({ theme, onTheme, onImport, onExport, onExit }:
       </div>
 
       <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          onClick={onShare}
+          title="Copy a link that loads this board for a collaborator"
+          style={{
+            cursor: 'pointer', border: `1px solid ${headerIsLight ? 'rgba(255,255,255,.35)' : t.border}`,
+            background: headerIsLight ? 'rgba(255,255,255,.10)' : '#fff',
+            color: headerIsLight ? t.headText : '#14315E',
+            padding: '8px 14px', borderRadius: 10, fontSize: 12.5, fontWeight: 700,
+            display: 'flex', alignItems: 'center', gap: 7,
+          }}
+        >
+          <span style={{ fontSize: 14, lineHeight: 1 }}>🔗</span>Share
+        </button>
         <button
           onClick={() => fileRef.current?.click()}
           style={{

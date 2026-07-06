@@ -37,7 +37,7 @@ export default function ProjectCommand({ onExit }: Props = {}) {
 
   return (
     <div style={{ minHeight: '100vh', background: t.appBg, color: t.text, fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}>
-      <PCHeader theme={pc.theme} onTheme={pc.setTheme} onImport={handleImport} onExport={handleExport} onExit={onExit} />
+      <PCHeader theme={pc.theme} onTheme={pc.setTheme} onImport={handleImport} onExport={handleExport} onShare={pc.share} onExit={onExit} />
       <Toolbar
         theme={t}
         tab={pc.tab} onTab={pc.setTab}

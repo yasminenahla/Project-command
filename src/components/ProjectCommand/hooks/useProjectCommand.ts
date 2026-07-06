@@ -3,6 +3,7 @@ import type { PCGroup, PCScale, PCTab, PCThemeName, Task, TaskStatus } from '../
 import { STATUSES } from '../types'
 import { seedTasks } from '../seed'
 import { addDays, uid } from '../utils/dates'
+import { buildShareUrl, clearShareFromLocation, readShareFromLocation } from '../utils/shareLink'
 
 const LS_KEY = 'pc-timeline-v1'
 
@@ -15,6 +16,10 @@ interface Persisted {
 }
 
 function load(): Persisted {
+  const shared = readShareFromLocation()
+  if (shared?.tasks?.length) {
+    return { tasks: shared.tasks, theme: shared.theme ?? 'playful', tab: 'tracker', scale: 'weeks', group: 'None' }
+  }
   try {
     const raw = localStorage.getItem(LS_KEY)
     if (raw) {
@@ -52,6 +57,16 @@ export function useProjectCommand() {
     clearTimeout(toastTimer.current)
     toastTimer.current = setTimeout(() => setToast(''), 2200)
   }, [])
+
+  // If this load came from a shared link, surface it once and drop the
+  // fragment so a later reload uses local storage instead of re-importing it.
+  useEffect(() => {
+    const shared = readShareFromLocation()
+    if (shared?.tasks?.length) {
+      flash(`Loaded shared board · ${shared.tasks.length} tasks`)
+      clearShareFromLocation()
+    }
+  }, [flash])
 
   const { tasks, theme, tab, scale, group } = persisted
 
@@ -136,6 +151,16 @@ export function useProjectCommand() {
     flash(`Imported ${imported.length} tasks`)
   }, [setTasks, flash])
 
+  const share = useCallback(async () => {
+    const url = buildShareUrl({ tasks, theme })
+    try {
+      await navigator.clipboard.writeText(url)
+      flash('Share link copied — send it to a collaborator')
+    } catch {
+      flash('Could not copy — copy the link from your address bar')
+    }
+  }, [tasks, theme, flash])
+
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase()
     if (!query) return tasks
@@ -148,7 +173,7 @@ export function useProjectCommand() {
     tasks, filtered, theme, tab, scale, group, q, depsFor, sel, toast,
     setTheme, setTab, setScale, setGroup, setQ, setDepsFor, setSel, flash,
     taskName, update, addTask, del, move, startDragReorder, dropReorder,
-    cycleStatus, toggleDone, toggleDep, importTasks, setTasks,
+    cycleStatus, toggleDone, toggleDep, importTasks, setTasks, share,
   }
 }
 
