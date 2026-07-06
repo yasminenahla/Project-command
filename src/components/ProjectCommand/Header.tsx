@@ -21,7 +21,7 @@ export default function PCHeader({ theme, onTheme, onImport, onExport, onExit }:
     padding: '7px 12px', boxShadow: '0 2px 8px rgba(20,49,94,.12)', display: 'flex',
     alignItems: 'center', border: 'none',
   } as const
-  const logoImg = <img src="/pepsico-logo.png" alt="PepsiCo" style={{ height: 26, display: 'block' }} draggable={false} />
+  const logoImg = <img src={`${import.meta.env.BASE_URL}pepsico-logo.png`} alt="PepsiCo" style={{ height: 26, display: 'block' }} draggable={false} />
 
   return (
     <div
