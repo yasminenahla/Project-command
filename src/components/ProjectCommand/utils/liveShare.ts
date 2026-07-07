@@ -1,10 +1,12 @@
 import type { SharePayload } from './shareLink'
 
-// jsonblob.com: free, keyless JSON storage — used so a share link always
+// kvdb.io: free, keyless key-value storage explicitly designed for direct
+// browser use (no CORS preflight issues) — used so a share link always
 // reflects the latest board instead of a snapshot baked into the URL.
-// Anyone holding the link/id can read AND overwrite that blob; there's no
+// Anyone holding the link/id can read AND overwrite that record; there's no
 // access control or uptime guarantee beyond what the free service offers.
-const API = 'https://jsonblob.com/api/jsonBlob'
+const BASE = 'https://kvdb.io'
+const KEY = 'board'
 
 async function safeFetch(url: string, init?: RequestInit): Promise<Response> {
   try {
@@ -12,38 +14,39 @@ async function safeFetch(url: string, init?: RequestInit): Promise<Response> {
   } catch (err) {
     // fetch() throws a generic TypeError for both offline connections and
     // CORS rejections — there's no way to tell them apart from here.
-    throw new Error(`network/CORS error reaching jsonblob (${err instanceof Error ? err.message : err})`)
+    throw new Error(`network/CORS error reaching kvdb.io (${err instanceof Error ? err.message : err})`)
   }
 }
 
-export async function createShare(payload: SharePayload): Promise<string> {
-  const res = await safeFetch(API, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  if (!res.ok) throw new Error(`jsonblob rejected the create request: HTTP ${res.status}`)
-  const location = res.headers.get('Location') ?? res.headers.get('location')
-  if (!location) {
-    throw new Error('jsonblob did not expose a Location header — likely a CORS header-exposure issue on their end')
-  }
-  const id = location.split('/').filter(Boolean).pop()
-  if (!id) throw new Error(`could not parse a blob id out of "${location}"`)
-  return id
-}
-
-export async function updateShare(id: string, payload: SharePayload): Promise<void> {
-  const res = await safeFetch(`${API}/${id}`, {
+async function writeValue(bucketId: string, payload: SharePayload): Promise<void> {
+  const res = await safeFetch(`${BASE}/${bucketId}/${KEY}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
-  if (!res.ok) throw new Error(`jsonblob rejected the update: HTTP ${res.status}`)
+  if (!res.ok) throw new Error(`kvdb.io rejected the write: HTTP ${res.status}`)
+}
+
+export async function createShare(payload: SharePayload): Promise<string> {
+  const created = await safeFetch(BASE, { method: 'POST' })
+  if (!created.ok) throw new Error(`kvdb.io rejected the bucket create: HTTP ${created.status}`)
+  const bucketId = (await created.text()).trim()
+  if (!bucketId) throw new Error('kvdb.io did not return a bucket id')
+  await writeValue(bucketId, payload)
+  return bucketId
+}
+
+export async function updateShare(id: string, payload: SharePayload): Promise<void> {
+  await writeValue(id, payload)
 }
 
 export async function fetchShare(id: string): Promise<SharePayload | null> {
-  const res = await safeFetch(`${API}/${id}`)
+  const res = await safeFetch(`${BASE}/${id}/${KEY}`)
   if (!res.ok) return null
-  const data = await res.json()
-  return Array.isArray(data?.tasks) ? (data as SharePayload) : null
+  try {
+    const data = JSON.parse(await res.text())
+    return Array.isArray(data?.tasks) ? (data as SharePayload) : null
+  } catch {
+    return null
+  }
 }
