@@ -12,6 +12,8 @@ interface Props {
   onScale:  (v: PCScale) => void
   onAdd:    () => void
   onAddMilestone: () => void
+  onRefresh: () => void
+  refreshing: boolean
 }
 
 const TABS: { id: PCTab; label: string; icon: string }[] = [
@@ -23,7 +25,7 @@ const TABS: { id: PCTab; label: string; icon: string }[] = [
 const GROUP_OPTS: PCGroup[] = ['None', 'Status', 'Owner', 'Priority', 'Milestone']
 const SCALE_OPTS: PCScale[] = ['days', 'weeks', 'months']
 
-export default function Toolbar({ theme: t, tab, onTab, q, onQ, group, onGroup, scale, onScale, onAdd, onAddMilestone }: Props) {
+export default function Toolbar({ theme: t, tab, onTab, q, onQ, group, onGroup, scale, onScale, onAdd, onAddMilestone, onRefresh, refreshing }: Props) {
   return (
     <div
       style={{
@@ -66,16 +68,39 @@ export default function Toolbar({ theme: t, tab, onTab, q, onQ, group, onGroup, 
       </div>
 
       {tab === 'tracker' && (
-        <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 700, color: t.sub }}>
-          Group
-          <select
-            value={group}
-            onChange={e => onGroup(e.target.value as PCGroup)}
-            style={{ border: `1px solid ${t.border}`, background: t.panel, color: t.text, borderRadius: 8, padding: '6px 8px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', outline: 'none' }}
+        <>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 700, color: t.sub }}>
+            Group
+            <select
+              value={group}
+              onChange={e => onGroup(e.target.value as PCGroup)}
+              style={{ border: `1px solid ${t.border}`, background: t.panel, color: t.text, borderRadius: 8, padding: '6px 8px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', outline: 'none' }}
+            >
+              {GROUP_OPTS.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </label>
+
+          <button
+            onClick={onRefresh}
+            disabled={refreshing}
+            title="Pull the latest board from the shared link"
+            style={{
+              cursor: refreshing ? 'default' : 'pointer', border: `1px solid ${t.border}`, background: t.panel, color: t.text,
+              padding: '9px 12px', borderRadius: 10, fontSize: 13, fontWeight: 700,
+              display: 'flex', alignItems: 'center', gap: 7, boxShadow: t.shadow, opacity: refreshing ? 0.6 : 1,
+            }}
           >
-            {GROUP_OPTS.map(o => <option key={o} value={o}>{o}</option>)}
-          </select>
-        </label>
+            <span
+              style={{
+                fontSize: 14, lineHeight: 1, display: 'inline-block',
+                animation: refreshing ? 'pc-spin 0.8s linear infinite' : 'none',
+              }}
+            >
+              ⟳
+            </span>
+            Refresh
+          </button>
+        </>
       )}
 
       {tab === 'gantt' && (

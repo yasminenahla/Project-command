@@ -46,6 +46,8 @@ export default function ProjectCommand({ onExit }: Props = {}) {
         scale={pc.scale} onScale={pc.setScale}
         onAdd={pc.addTask}
         onAddMilestone={pc.addMilestone}
+        onRefresh={pc.refresh}
+        refreshing={pc.refreshing}
       />
       <div style={{ padding: '0 22px 60px' }}>
         {pc.tab === 'tracker' && (

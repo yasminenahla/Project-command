@@ -44,6 +44,7 @@ export function useProjectCommand() {
   const [depsFor, setDepsFor] = useState<string | null>(null)
   const [sel, setSel]       = useState<string | null>(null)
   const [toast, setToast]   = useState('')
+  const [refreshing, setRefreshing] = useState(false)
 
   const toastTimer = useRef<ReturnType<typeof setTimeout>>()
   const dragId      = useRef<string | null>(null)
@@ -231,6 +232,27 @@ export function useProjectCommand() {
     }
   }, [tasks, theme, shareId, flash])
 
+  const refresh = useCallback(async () => {
+    if (!shareId) {
+      flash('Not shared yet — click Share to sync with collaborators')
+      return
+    }
+    setRefreshing(true)
+    try {
+      const remote = await fetchShare(shareId)
+      if (remote?.tasks?.length) {
+        setPersisted(p => ({ ...p, tasks: remote.tasks, theme: remote.theme ?? p.theme }))
+        flash(`Refreshed · ${remote.tasks.length} tasks`)
+      } else {
+        flash('Could not find that shared board anymore')
+      }
+    } catch {
+      flash('Could not refresh — check your connection and try again')
+    } finally {
+      setRefreshing(false)
+    }
+  }, [shareId, flash])
+
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase()
     if (!query) return tasks
@@ -243,11 +265,11 @@ export function useProjectCommand() {
   const hierarchicalFiltered = useMemo(() => buildHierarchicalOrder(filtered), [filtered])
 
   return {
-    tasks, filtered, theme, tab, scale, group, q, depsFor, sel, toast,
+    tasks, filtered, theme, tab, scale, group, q, depsFor, sel, toast, refreshing,
     milestones, hierarchicalFiltered,
     setTheme, setTab, setScale, setGroup, setQ, setDepsFor, setSel, flash,
     taskName, update, addTask, addMilestone, setMilestone, del, move, startDragReorder, dropReorder,
-    cycleStatus, toggleDone, toggleDep, importTasks, setTasks, share,
+    cycleStatus, toggleDone, toggleDep, importTasks, setTasks, share, refresh,
   }
 }
 
