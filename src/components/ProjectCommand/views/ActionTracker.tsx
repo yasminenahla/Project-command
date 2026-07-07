@@ -9,6 +9,7 @@ interface Props {
   theme:      PCTheme
   tasks:      Task[]      // filtered, in display order
   allTasks:   Task[]      // full set, for deps popover
+  milestones: Task[]      // tasks marked isMilestone, for the Milestone column's options
   group:      PCGroup
   sel:        string | null
   depsFor:    string | null
@@ -22,19 +23,37 @@ interface Props {
   onToggleDone:  (id: string) => void
   onToggleDep:   (id: string, depId: string) => void
   onSetDepsFor:  (id: string | null) => void
+  onSetMilestone: (id: string, milestoneId: string | null) => void
 }
 
-const COLS = ['', '', 'Task', 'Owner', 'Status', 'Priority', 'Start', 'Due', 'Progress', 'Tags', 'Deps', 'Notes', '']
+const COLS = ['', '', 'Task', 'Owner', 'Status', 'Priority', 'Milestone', 'Start', 'Due', 'Progress', 'Tags', 'Deps', 'Notes', '']
 const STATUS_C_DONE = STATUS_COLOR.Done
 
 export default function ActionTracker({
-  theme: t, tasks, allTasks, group, sel, depsFor, taskName,
-  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor,
+  theme: t, tasks, allTasks, milestones, group, sel, depsFor, taskName,
+  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone,
 }: Props) {
   const grouped = group !== 'None'
+  const groupByMilestone = group === 'Milestone'
 
   let groups: [string | null, Task[]][]
-  if (grouped) {
+  if (groupByMilestone) {
+    const byId = new Map(milestones.map(m => [m.id, m]))
+    const childMap = new Map<string, Task[]>()
+    const unassigned: Task[] = []
+    for (const x of tasks) {
+      if (x.isMilestone) continue
+      if (x.milestoneId && byId.has(x.milestoneId)) {
+        (childMap.get(x.milestoneId) ?? childMap.set(x.milestoneId, []).get(x.milestoneId)!).push(x)
+      } else {
+        unassigned.push(x)
+      }
+    }
+    groups = milestones
+      .filter(m => tasks.includes(m) || (childMap.get(m.id)?.length ?? 0) > 0)
+      .map((m): [string, Task[]] => [m.name, [m, ...(childMap.get(m.id) ?? [])]])
+    if (unassigned.length) groups.push(['No milestone', unassigned])
+  } else if (grouped) {
     const map: Record<string, Task[]> = {}
     for (const x of tasks) {
       const g = (group === 'Status' ? x.status : group === 'Owner' ? (x.owner || 'Unassigned') : x.priority) || '—'
@@ -73,7 +92,7 @@ export default function ActionTracker({
           {groups.flatMap(([g, list]) => [
             g != null && (
               <tr key={`g${g}`}>
-                <td colSpan={13} style={{ padding: '11px 14px 7px' }}>
+                <td colSpan={14} style={{ padding: '11px 14px 7px' }}>
                   <span style={{ fontSize: 12, fontWeight: 800, color: t.text, letterSpacing: 0.3 }}>{g}</span>
                   <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: t.sub, background: t.chip, padding: '2px 8px', borderRadius: 99 }}>
                     {list.length}
@@ -87,9 +106,11 @@ export default function ActionTracker({
                 task={task}
                 theme={t}
                 grouped={grouped}
+                indent={groupByMilestone && !task.isMilestone}
                 selected={sel === task.id}
                 depsOpen={depsFor === task.id}
                 allTasks={allTasks}
+                milestones={milestones}
                 taskName={taskName}
                 onUpdate={onUpdate}
                 onDelete={onDelete}
@@ -100,6 +121,7 @@ export default function ActionTracker({
                 onToggleDone={onToggleDone}
                 onToggleDep={onToggleDep}
                 onSetDepsFor={onSetDepsFor}
+                onSetMilestone={onSetMilestone}
               />
             )),
           ])}
@@ -113,9 +135,11 @@ interface RowProps {
   task:       Task
   theme:      PCTheme
   grouped:    boolean
+  indent:     boolean
   selected:   boolean
   depsOpen:   boolean
   allTasks:   Task[]
+  milestones: Task[]
   taskName:   (id: string) => string
   onUpdate:   (id: string, patch: Partial<Task>) => void
   onDelete:   (id: string) => void
@@ -126,11 +150,12 @@ interface RowProps {
   onToggleDone:  (id: string) => void
   onToggleDep:   (id: string, depId: string) => void
   onSetDepsFor:  (id: string | null) => void
+  onSetMilestone: (id: string, milestoneId: string | null) => void
 }
 
 function TrackerRow({
-  task, theme: t, grouped, selected, depsOpen, allTasks, taskName,
-  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor,
+  task, theme: t, grouped, indent, selected, depsOpen, allTasks, milestones, taskName,
+  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone,
 }: RowProps) {
   const done = task.status === 'Done'
   const cell = (child: React.ReactNode, style?: React.CSSProperties) => (
@@ -143,7 +168,11 @@ function TrackerRow({
       onDragStart={() => onDragStart(task.id)}
       onDragOver={e => e.preventDefault()}
       onDrop={() => onDrop(task.id)}
-      style={{ borderBottom: `1px solid ${t.line}`, background: selected ? t.chip : 'transparent', transition: 'background .15s' }}
+      style={{
+        borderBottom: `1px solid ${t.line}`,
+        background: selected ? t.chip : task.isMilestone ? t.panel2 : 'transparent',
+        transition: 'background .15s',
+      }}
     >
       {cell(
         !grouped ? (
@@ -154,6 +183,8 @@ function TrackerRow({
               <button onClick={() => onMove(task.id, 1)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: t.sub, fontSize: 9, lineHeight: 0.7, padding: 0 }}>▼</button>
             </div>
           </div>
+        ) : task.isMilestone ? (
+          <span title="Milestone" style={{ color: t.accent, fontSize: 13 }}>◆</span>
         ) : <span style={{ color: t.sub, fontSize: 12 }}>·</span>,
         { width: 26 },
       )}
@@ -174,12 +205,17 @@ function TrackerRow({
       )}
 
       {cell(
-        <InlineInput
-          value={task.name}
-          onCommit={v => onUpdate(task.id, { name: v })}
-          theme={t}
-          style={{ fontWeight: 700, fontSize: 13.5, minWidth: 180, textDecoration: done ? 'line-through' : 'none', opacity: done ? 0.6 : 1 }}
-        />,
+        <div style={{ paddingLeft: indent ? 18 : 0 }}>
+          <InlineInput
+            value={task.name}
+            onCommit={v => onUpdate(task.id, { name: v })}
+            theme={t}
+            style={{
+              fontWeight: task.isMilestone ? 800 : 700, fontSize: task.isMilestone ? 14 : 13.5, minWidth: 180,
+              textDecoration: done ? 'line-through' : 'none', opacity: done ? 0.6 : 1,
+            }}
+          />
+        </div>,
         { minWidth: 200 },
       )}
 
@@ -220,6 +256,24 @@ function TrackerRow({
         >
           {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
         </select>,
+      )}
+
+      {cell(
+        task.isMilestone ? (
+          <span style={{ fontSize: 11, fontWeight: 700, color: t.accent }}>◆ Milestone</span>
+        ) : (
+          <select
+            value={task.milestoneId ?? ''}
+            onChange={e => onSetMilestone(task.id, e.target.value || null)}
+            style={{
+              border: `1px solid ${t.border}`, background: t.panel, color: t.text, borderRadius: 8,
+              padding: '5px 6px', fontSize: 12, fontWeight: 600, cursor: 'pointer', outline: 'none', maxWidth: 130,
+            }}
+          >
+            <option value="">— none —</option>
+            {milestones.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        ),
       )}
 
       {cell(

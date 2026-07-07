@@ -166,10 +166,19 @@ export default function Gantt({ theme: t, tasks, scale, onUpdate, onSelect }: Pr
             Task
           </div>
           {tasks.map(task => (
-            <div key={task.id} style={{ height: ROW, display: 'flex', alignItems: 'center', gap: 9, padding: '0 14px', borderBottom: `1px solid ${t.line}` }}>
+            <div
+              key={task.id}
+              style={{
+                height: ROW, display: 'flex', alignItems: 'center', gap: 9, borderBottom: `1px solid ${t.line}`,
+                padding: `0 14px 0 ${task.isMilestone ? 14 : task.milestoneId ? 28 : 14}px`,
+                background: task.isMilestone ? t.chip : 'transparent',
+              }}
+            >
               <span style={{ width: 8, height: 8, borderRadius: 2, flexShrink: 0, background: STATUS_COLOR[task.status] }} />
               <div style={{ overflow: 'hidden' }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: t.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{task.name}</div>
+                <div style={{ fontSize: task.isMilestone ? 13.5 : 13, fontWeight: task.isMilestone ? 800 : 700, color: t.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {task.isMilestone && <span style={{ color: t.accent, marginRight: 5 }}>◆</span>}{task.name}
+                </div>
                 <div style={{ fontSize: 10.5, fontWeight: 600, color: t.sub }}>{task.owner || 'Unassigned'}</div>
               </div>
             </div>
@@ -208,6 +217,9 @@ export default function Gantt({ theme: t, tasks, scale, onUpdate, onSelect }: Pr
             <div style={{ position: 'relative', height: gridH }}>
               {scale === 'days' && cols.filter(c => c.weekend).map((c, i) => (
                 <div key={`we${i}`} style={{ position: 'absolute', left: c.x, top: 0, width: c.w, height: gridH, background: t.weekend }} />
+              ))}
+              {tasks.map((task, i) => task.isMilestone && (
+                <div key={`mb${i}`} style={{ position: 'absolute', left: 0, top: rowY(i), width: W, height: ROW, background: t.chip, opacity: 0.5 }} />
               ))}
               {cols.map((c, i) => (
                 <div key={`gl${i}`} style={{ position: 'absolute', left: c.x, top: 0, width: 1, height: gridH, background: t.line }} />
@@ -249,8 +261,9 @@ export default function Gantt({ theme: t, tasks, scale, onUpdate, onSelect }: Pr
                     onClick={() => onSelect(task.id)}
                     style={{
                       position: 'absolute', left, top: rowY(i) + (ROW - BAR) / 2, width: w, height: BAR, borderRadius: t.barRad,
-                      background: color, cursor: 'grab', boxShadow: '0 2px 6px rgba(20,49,94,.18)', display: 'flex',
-                      alignItems: 'center', overflow: 'hidden', zIndex: 4,
+                      background: color, cursor: 'grab', display: 'flex', alignItems: 'center', overflow: 'hidden', zIndex: 4,
+                      border: task.isMilestone ? '2px solid rgba(255,255,255,.6)' : 'none',
+                      boxShadow: task.isMilestone ? '0 3px 10px rgba(20,49,94,.35)' : '0 2px 6px rgba(20,49,94,.18)',
                     }}
                   >
                     <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${task.progress || 0}%`, background: 'rgba(255,255,255,.28)' }} />
@@ -269,7 +282,7 @@ export default function Gantt({ theme: t, tasks, scale, onUpdate, onSelect }: Pr
                       style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 8, cursor: 'ew-resize', zIndex: 2 }}
                     />
                     <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', padding: '0 10px', whiteSpace: 'nowrap', position: 'relative', textShadow: '0 1px 2px rgba(0,0,0,.2)' }}>
-                      {w > 60 ? task.name : ''}
+                      {w > 60 ? (task.isMilestone ? `◆ ${task.name}` : task.name) : ''}
                     </span>
                     {task.progress > 0 && task.progress < 100 && w > 120 && (
                       <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800, color: '#fff', padding: '0 8px', opacity: 0.9 }}>{task.progress}%</span>

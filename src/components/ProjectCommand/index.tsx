@@ -45,6 +45,7 @@ export default function ProjectCommand({ onExit }: Props = {}) {
         group={pc.group} onGroup={pc.setGroup}
         scale={pc.scale} onScale={pc.setScale}
         onAdd={pc.addTask}
+        onAddMilestone={pc.addMilestone}
       />
       <div style={{ padding: '0 22px 60px' }}>
         {pc.tab === 'tracker' && (
@@ -52,6 +53,7 @@ export default function ProjectCommand({ onExit }: Props = {}) {
             theme={t}
             tasks={pc.filtered}
             allTasks={pc.tasks}
+            milestones={pc.milestones}
             group={pc.group}
             sel={pc.sel}
             depsFor={pc.depsFor}
@@ -65,10 +67,11 @@ export default function ProjectCommand({ onExit }: Props = {}) {
             onToggleDone={pc.toggleDone}
             onToggleDep={pc.toggleDep}
             onSetDepsFor={pc.setDepsFor}
+            onSetMilestone={pc.setMilestone}
           />
         )}
         {pc.tab === 'gantt' && (
-          <Gantt theme={t} tasks={pc.filtered} scale={pc.scale} onUpdate={pc.update} onSelect={selectTask} />
+          <Gantt theme={t} tasks={pc.hierarchicalFiltered} scale={pc.scale} onUpdate={pc.update} onSelect={selectTask} />
         )}
         {pc.tab === 'timeline' && (
           <Timeline theme={t} tasks={pc.filtered} onSelect={selectTask} />

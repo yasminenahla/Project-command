@@ -4,6 +4,7 @@ import { STATUSES } from '../types'
 import { seedTasks } from '../seed'
 import { addDays, uid } from '../utils/dates'
 import { buildShareUrl, clearShareFromLocation, readShareFromLocation } from '../utils/shareLink'
+import { buildHierarchicalOrder } from '../utils/hierarchy'
 
 const LS_KEY = 'pc-timeline-v1'
 
@@ -85,20 +86,42 @@ export function useProjectCommand() {
     setTasks(tasks.map(t => t.id === id ? { ...t, ...patch } : t))
   }, [tasks, setTasks])
 
-  const addTask = useCallback(() => {
+  const addTask = useCallback((milestoneId?: string) => {
     const last = tasks[tasks.length - 1]
     const start = last ? addDays(last.end, 1) : new Date().toISOString().slice(0, 10)
     const nt: Task = {
       id: uid(), name: 'New task', owner: '', status: 'Not started', priority: 'Medium',
       start, end: addDays(start, 4), progress: 0, deps: [], tags: [], notes: '',
+      milestoneId: milestoneId ?? null,
     }
     setTasks([...tasks, nt])
     setSel(nt.id)
     flash('Task added')
   }, [tasks, setTasks, flash])
 
+  const addMilestone = useCallback(() => {
+    const last = tasks[tasks.length - 1]
+    const start = last ? addDays(last.end, 1) : new Date().toISOString().slice(0, 10)
+    const nt: Task = {
+      id: uid(), name: 'New milestone', owner: '', status: 'Not started', priority: 'High',
+      start, end: addDays(start, 9), progress: 0, deps: [], tags: [], notes: '',
+      isMilestone: true, milestoneId: null,
+    }
+    setTasks([...tasks, nt])
+    setSel(nt.id)
+    flash('Milestone added')
+  }, [tasks, setTasks, flash])
+
+  const setMilestone = useCallback((id: string, milestoneId: string | null) => {
+    update(id, { milestoneId })
+  }, [update])
+
   const del = useCallback((id: string) => {
-    setTasks(tasks.filter(t => t.id !== id).map(t => ({ ...t, deps: t.deps.filter(d => d !== id) })))
+    setTasks(tasks.filter(t => t.id !== id).map(t => ({
+      ...t,
+      deps: t.deps.filter(d => d !== id),
+      milestoneId: t.milestoneId === id ? null : t.milestoneId,
+    })))
   }, [tasks, setTasks])
 
   const move = useCallback((id: string, dir: 1 | -1) => {
@@ -169,10 +192,14 @@ export function useProjectCommand() {
     )
   }, [tasks, q])
 
+  const milestones = useMemo(() => tasks.filter(t => t.isMilestone), [tasks])
+  const hierarchicalFiltered = useMemo(() => buildHierarchicalOrder(filtered), [filtered])
+
   return {
     tasks, filtered, theme, tab, scale, group, q, depsFor, sel, toast,
+    milestones, hierarchicalFiltered,
     setTheme, setTab, setScale, setGroup, setQ, setDepsFor, setSel, flash,
-    taskName, update, addTask, del, move, startDragReorder, dropReorder,
+    taskName, update, addTask, addMilestone, setMilestone, del, move, startDragReorder, dropReorder,
     cycleStatus, toggleDone, toggleDep, importTasks, setTasks, share,
   }
 }

@@ -40,16 +40,16 @@ export default function Timeline({ theme: t, tasks: filtered, onSelect }: Props)
           <div
             onClick={() => onSelect(task.id)}
             style={{
-              background: t.panel, border: `1px solid ${t.border}`, borderRadius: t.radius, padding: '14px 16px',
-              boxShadow: t.shadow, cursor: 'pointer', borderLeft: `4px solid ${STATUS_COLOR[task.status]}`,
+              background: task.isMilestone ? t.chip : t.panel, border: `1px solid ${t.border}`, borderRadius: t.radius, padding: '14px 16px',
+              boxShadow: t.shadow, cursor: 'pointer', borderLeft: `${task.isMilestone ? 6 : 4}px solid ${STATUS_COLOR[task.status]}`,
               transition: 'transform .15s',
             }}
             onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)' }}
             onMouseLeave={e => { e.currentTarget.style.transform = 'none' }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, justifyContent: left ? 'flex-end' : 'flex-start', flexDirection: left ? 'row-reverse' : 'row' }}>
-              <span style={{ fontSize: 14.5, fontWeight: 800, color: t.text, textDecoration: done ? 'line-through' : 'none', opacity: done ? 0.65 : 1 }}>
-                {task.name}
+              <span style={{ fontSize: task.isMilestone ? 15.5 : 14.5, fontWeight: 800, color: t.text, textDecoration: done ? 'line-through' : 'none', opacity: done ? 0.65 : 1 }}>
+                {task.isMilestone && <span style={{ color: t.accent, marginRight: 6 }}>◆</span>}{task.name}
               </span>
               <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: STATUS_COLOR[task.status], padding: '2px 8px', borderRadius: 99, whiteSpace: 'nowrap' }}>
                 {task.status}
@@ -99,9 +99,14 @@ export default function Timeline({ theme: t, tasks: filtered, onSelect }: Props)
                 {left ? card : null}
               </div>
               <div style={{
-                position: 'absolute', left: '50%', marginLeft: -9, width: 18, height: 18, borderRadius: 99,
-                background: t.panel, border: `3px solid ${STATUS_COLOR[task.status]}`, zIndex: 3, boxShadow: `0 0 0 4px ${t.appBg}`,
-              }} />
+                position: 'absolute', left: '50%',
+                marginLeft: task.isMilestone ? -13 : -9, width: task.isMilestone ? 26 : 18, height: task.isMilestone ? 26 : 18, borderRadius: 99,
+                background: task.isMilestone ? STATUS_COLOR[task.status] : t.panel,
+                border: `3px solid ${STATUS_COLOR[task.status]}`, zIndex: 3, boxShadow: `0 0 0 4px ${t.appBg}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {task.isMilestone && <span style={{ color: '#fff', fontSize: 11 }}>◆</span>}
+              </div>
               <div style={{ width: '50%', paddingLeft: left ? 0 : 26, paddingRight: left ? 26 : 0, order: left ? 2 : 0 }}>
                 {!left ? card : null}
               </div>

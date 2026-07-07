@@ -11,6 +11,7 @@ interface Props {
   scale:    PCScale
   onScale:  (v: PCScale) => void
   onAdd:    () => void
+  onAddMilestone: () => void
 }
 
 const TABS: { id: PCTab; label: string; icon: string }[] = [
@@ -19,10 +20,10 @@ const TABS: { id: PCTab; label: string; icon: string }[] = [
   { id: 'gantt',    label: 'Gantt',          icon: '▤' },
 ]
 
-const GROUP_OPTS: PCGroup[] = ['None', 'Status', 'Owner', 'Priority']
+const GROUP_OPTS: PCGroup[] = ['None', 'Status', 'Owner', 'Priority', 'Milestone']
 const SCALE_OPTS: PCScale[] = ['days', 'weeks', 'months']
 
-export default function Toolbar({ theme: t, tab, onTab, q, onQ, group, onGroup, scale, onScale, onAdd }: Props) {
+export default function Toolbar({ theme: t, tab, onTab, q, onQ, group, onGroup, scale, onScale, onAdd, onAddMilestone }: Props) {
   return (
     <div
       style={{
@@ -97,6 +98,18 @@ export default function Toolbar({ theme: t, tab, onTab, q, onQ, group, onGroup, 
           })}
         </div>
       )}
+
+      <button
+        onClick={onAddMilestone}
+        title="Add a key milestone to group tasks under"
+        style={{
+          cursor: 'pointer', border: `1px solid ${t.border}`, background: t.panel, color: t.text,
+          padding: '9px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700,
+          display: 'flex', alignItems: 'center', gap: 7, boxShadow: t.shadow,
+        }}
+      >
+        <span style={{ fontSize: 13, lineHeight: 1 }}>◆</span>Add milestone
+      </button>
 
       <button
         onClick={onAdd}

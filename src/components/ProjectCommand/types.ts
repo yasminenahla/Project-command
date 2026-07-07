@@ -13,12 +13,14 @@ export interface Task {
   deps:     string[]     // predecessor task ids
   tags:     string[]
   notes:    string
+  isMilestone?: boolean  // marks this task as a key milestone (a group header for other tasks)
+  milestoneId?: string | null  // id of the milestone task this task falls under, if any
 }
 
 export type PCThemeName = 'minimal' | 'playful' | 'bold'
 export type PCTab        = 'timeline' | 'tracker' | 'gantt'
 export type PCScale       = 'days' | 'weeks' | 'months'
-export type PCGroup       = 'None' | 'Status' | 'Owner' | 'Priority'
+export type PCGroup       = 'None' | 'Status' | 'Owner' | 'Priority' | 'Milestone'
 
 export interface PCTheme {
   label:      string
