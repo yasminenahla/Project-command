@@ -77,8 +77,9 @@ export function useProjectCommand() {
           } else {
             flash('That share link looks empty or invalid')
           }
-        } catch {
-          if (!cancelled) flash('Could not reach the shared board — showing your local one instead')
+        } catch (err) {
+          console.error('[ProjectCommand] loading shared board failed:', err)
+          if (!cancelled) flash(`Could not reach the shared board: ${err instanceof Error ? err.message : 'unknown error'}`)
         }
         clearShareFromLocation()
         return
@@ -227,8 +228,9 @@ export function useProjectCommand() {
       } catch {
         flash('Link ready but could not copy it — copy it from your address bar')
       }
-    } catch {
-      flash('Could not create the share link — check your connection and try again')
+    } catch (err) {
+      console.error('[ProjectCommand] share failed:', err)
+      flash(`Could not create the share link: ${err instanceof Error ? err.message : 'unknown error'}`)
     }
   }, [tasks, theme, shareId, flash])
 
@@ -246,8 +248,9 @@ export function useProjectCommand() {
       } else {
         flash('Could not find that shared board anymore')
       }
-    } catch {
-      flash('Could not refresh — check your connection and try again')
+    } catch (err) {
+      console.error('[ProjectCommand] refresh failed:', err)
+      flash(`Could not refresh: ${err instanceof Error ? err.message : 'unknown error'}`)
     } finally {
       setRefreshing(false)
     }
