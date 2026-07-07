@@ -32,3 +32,43 @@ export function buildHierarchicalOrder(list: Task[]): Task[] {
   list.forEach(t => { if (!placed.has(t.id)) { out.push(t); placed.add(t.id) } })
   return out
 }
+
+export type TimelineRow =
+  | { kind: 'milestone'; milestone: Task; children: Task[]; completion: number; start: string }
+  | { kind: 'task'; task: Task; start: string }
+
+/**
+ * Collapses a task list to one row per milestone (with its children rolled
+ * up into a completion percentage) plus a row for every task that isn't
+ * under a milestone — sorted chronologically by start date.
+ */
+export function rollupByMilestone(list: Task[]): TimelineRow[] {
+  const milestones = list.filter(t => t.isMilestone)
+  const milestoneIds = new Set(milestones.map(m => m.id))
+  const childrenOf = new Map<string, Task[]>()
+  const unassigned: Task[] = []
+
+  list.forEach(t => {
+    if (t.isMilestone) return
+    if (t.milestoneId && milestoneIds.has(t.milestoneId)) {
+      const arr = childrenOf.get(t.milestoneId) ?? []
+      arr.push(t)
+      childrenOf.set(t.milestoneId, arr)
+    } else {
+      unassigned.push(t)
+    }
+  })
+
+  const rows: TimelineRow[] = [
+    ...milestones.map((m): TimelineRow => {
+      const children = childrenOf.get(m.id) ?? []
+      const completion = children.length
+        ? Math.round(children.reduce((sum, c) => sum + c.progress, 0) / children.length)
+        : m.progress
+      return { kind: 'milestone', milestone: m, children, completion, start: m.start }
+    }),
+    ...unassigned.map((t): TimelineRow => ({ kind: 'task', task: t, start: t.start })),
+  ]
+
+  return rows.sort((a, b) => a.start < b.start ? -1 : 1)
+}
