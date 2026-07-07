@@ -5,27 +5,30 @@ export interface SharePayload {
   theme: PCThemeName
 }
 
-function toBase64Url(str: string): string {
-  const b64 = btoa(unescape(encodeURIComponent(str)))
-  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
-
 function fromBase64Url(str: string): string {
   const b64 = str.replace(/-/g, '+').replace(/_/g, '/')
   const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4)
   return decodeURIComponent(escape(atob(padded)))
 }
 
-/** Builds a URL that carries the current board as a `#share=` fragment — no server involved. */
-export function buildShareUrl(payload: SharePayload): string {
-  const encoded = toBase64Url(JSON.stringify(payload))
+/** Builds a URL carrying a live share id as a `#s=` fragment — opening it always fetches the latest board. */
+export function buildShareUrl(id: string): string {
   const url = new URL(window.location.href)
-  url.hash = `share=${encoded}`
+  url.hash = `s=${id}`
   return url.toString()
 }
 
-/** Reads a `#share=` payload from the current URL, if present. */
-export function readShareFromLocation(): SharePayload | null {
+/** Reads a `#s=<id>` live-share reference from the current URL, if present. */
+export function readShareIdFromLocation(): string | null {
+  const hash = window.location.hash.replace(/^#/, '')
+  return new URLSearchParams(hash).get('s')
+}
+
+/**
+ * Legacy fallback: reads a full board snapshot from an older `#share=<base64>` link
+ * (pre-dating live sync). Still honored so links already sent out keep working once.
+ */
+export function readLegacySnapshotFromLocation(): SharePayload | null {
   const hash = window.location.hash.replace(/^#/, '')
   const encoded = new URLSearchParams(hash).get('share')
   if (!encoded) return null
@@ -36,7 +39,7 @@ export function readShareFromLocation(): SharePayload | null {
   return null
 }
 
-/** Strips the `#share=` fragment once its payload has been loaded, so reloads use local storage. */
+/** Strips the share fragment once its payload has been loaded, so reloads use local storage. */
 export function clearShareFromLocation(): void {
   history.replaceState(null, '', window.location.pathname + window.location.search)
 }

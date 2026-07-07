@@ -3,7 +3,8 @@ import type { PCGroup, PCScale, PCTab, PCThemeName, Task, TaskStatus } from '../
 import { STATUSES } from '../types'
 import { seedTasks } from '../seed'
 import { addDays, uid } from '../utils/dates'
-import { buildShareUrl, clearShareFromLocation, readShareFromLocation } from '../utils/shareLink'
+import { buildShareUrl, clearShareFromLocation, readLegacySnapshotFromLocation, readShareIdFromLocation } from '../utils/shareLink'
+import { createShare, fetchShare, updateShare } from '../utils/liveShare'
 import { buildHierarchicalOrder } from '../utils/hierarchy'
 
 const LS_KEY = 'pc-timeline-v1'
@@ -14,13 +15,10 @@ interface Persisted {
   tab:   PCTab
   scale: PCScale
   group: PCGroup
+  shareId?: string  // jsonblob id this board auto-syncs to, once shared
 }
 
 function load(): Persisted {
-  const shared = readShareFromLocation()
-  if (shared?.tasks?.length) {
-    return { tasks: shared.tasks, theme: shared.theme ?? 'playful', tab: 'tracker', scale: 'weeks', group: 'None' }
-  }
   try {
     const raw = localStorage.getItem(LS_KEY)
     if (raw) {
@@ -32,6 +30,7 @@ function load(): Persisted {
           tab:   s.tab   ?? 'tracker',
           scale: s.scale ?? 'weeks',
           group: s.group ?? 'None',
+          shareId: s.shareId,
         }
       }
     }
@@ -48,6 +47,7 @@ export function useProjectCommand() {
 
   const toastTimer = useRef<ReturnType<typeof setTimeout>>()
   const dragId      = useRef<string | null>(null)
+  const syncTimer   = useRef<ReturnType<typeof setTimeout>>()
 
   useEffect(() => {
     try { localStorage.setItem(LS_KEY, JSON.stringify(persisted)) } catch { /* ignore quota errors */ }
@@ -59,17 +59,53 @@ export function useProjectCommand() {
     toastTimer.current = setTimeout(() => setToast(''), 2200)
   }, [])
 
-  // If this load came from a shared link, surface it once and drop the
-  // fragment so a later reload uses local storage instead of re-importing it.
+  // If the URL carries a live share id, fetch the current board from it —
+  // always the latest, not a snapshot — and keep syncing to it from here on.
+  // Falls back to an older full-payload snapshot link if that's what was sent.
   useEffect(() => {
-    const shared = readShareFromLocation()
-    if (shared?.tasks?.length) {
-      flash(`Loaded shared board · ${shared.tasks.length} tasks`)
-      clearShareFromLocation()
+    let cancelled = false
+    async function hydrate() {
+      const id = readShareIdFromLocation()
+      if (id) {
+        try {
+          const remote = await fetchShare(id)
+          if (cancelled) return
+          if (remote?.tasks?.length) {
+            setPersisted(p => ({ ...p, tasks: remote.tasks, theme: remote.theme ?? p.theme, shareId: id }))
+            flash(`Loaded shared board · ${remote.tasks.length} tasks`)
+          } else {
+            flash('That share link looks empty or invalid')
+          }
+        } catch {
+          if (!cancelled) flash('Could not reach the shared board — showing your local one instead')
+        }
+        clearShareFromLocation()
+        return
+      }
+      const legacy = readLegacySnapshotFromLocation()
+      if (legacy?.tasks?.length) {
+        flash(`Loaded shared board · ${legacy.tasks.length} tasks`)
+        clearShareFromLocation()
+      }
     }
-  }, [flash])
+    hydrate()
+    return () => { cancelled = true }
+  }, [])
 
-  const { tasks, theme, tab, scale, group } = persisted
+  const { tasks, theme, tab, scale, group, shareId } = persisted
+
+  // Once a board is shared, keep the remote copy fresh as it's edited —
+  // debounced so rapid edits collapse into one sync a little after they stop.
+  useEffect(() => {
+    if (!shareId) return
+    clearTimeout(syncTimer.current)
+    syncTimer.current = setTimeout(() => {
+      updateShare(shareId, { tasks, theme }).catch(() => {
+        flash('Could not sync your latest changes to the share link')
+      })
+    }, 1200)
+    return () => clearTimeout(syncTimer.current)
+  }, [shareId, tasks, theme, flash])
 
   const setTasks = useCallback((next: Task[]) => {
     setPersisted(p => ({ ...p, tasks: next }))
@@ -175,14 +211,25 @@ export function useProjectCommand() {
   }, [setTasks, flash])
 
   const share = useCallback(async () => {
-    const url = buildShareUrl({ tasks, theme })
     try {
-      await navigator.clipboard.writeText(url)
-      flash('Share link copied — send it to a collaborator')
+      let id = shareId
+      if (!id) {
+        id = await createShare({ tasks, theme })
+        setPersisted(p => ({ ...p, shareId: id }))
+      } else {
+        await updateShare(id, { tasks, theme })
+      }
+      const url = buildShareUrl(id)
+      try {
+        await navigator.clipboard.writeText(url)
+        flash('Share link copied — it stays up to date as you edit')
+      } catch {
+        flash('Link ready but could not copy it — copy it from your address bar')
+      }
     } catch {
-      flash('Could not copy — copy the link from your address bar')
+      flash('Could not create the share link — check your connection and try again')
     }
-  }, [tasks, theme, flash])
+  }, [tasks, theme, shareId, flash])
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase()
