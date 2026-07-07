@@ -1,6 +1,6 @@
 import type { PCTheme, Task } from '../types'
-import { STATUS_COLOR } from '../theme'
-import { MONTHS, fmtShort, parseDate } from '../utils/dates'
+import { STATUS_COLOR, LATE_COLOR } from '../theme'
+import { MONTHS, fmtShort, isTaskLate, parseDate } from '../utils/dates'
 
 interface Props {
   theme:    PCTheme
@@ -35,6 +35,7 @@ export default function Timeline({ theme: t, tasks: filtered, onSelect }: Props)
         const showMonth = mLabel !== curMonth
         curMonth = mLabel
         const done = task.status === 'Done'
+        const late = isTaskLate(task.end, task.status)
 
         const card = (
           <div
@@ -54,8 +55,13 @@ export default function Timeline({ theme: t, tasks: filtered, onSelect }: Props)
               <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: STATUS_COLOR[task.status], padding: '2px 8px', borderRadius: 99, whiteSpace: 'nowrap' }}>
                 {task.status}
               </span>
+              {late && (
+                <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: LATE_COLOR, padding: '2px 8px', borderRadius: 99, whiteSpace: 'nowrap', letterSpacing: 0.3 }}>
+                  LATE
+                </span>
+              )}
             </div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: t.sub, fontFamily: "'DM Mono',monospace", textAlign: left ? 'right' : 'left' }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: late ? LATE_COLOR : t.sub, fontFamily: "'DM Mono',monospace", textAlign: left ? 'right' : 'left' }}>
               {fmtShort(task.start)} → {fmtShort(task.end)}
             </div>
             {task.notes && (

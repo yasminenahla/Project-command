@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PCScale, PCTheme, Task } from '../types'
 import { STATUSES } from '../types'
-import { STATUS_COLOR } from '../theme'
-import { MONTHS, WEEKDAY_INITIALS, addDays, daysInMonth, diffDays, firstOfMonth, fmtShort, isoDate, mondayOf, parseDate } from '../utils/dates'
+import { STATUS_COLOR, LATE_COLOR } from '../theme'
+import { MONTHS, WEEKDAY_INITIALS, addDays, daysInMonth, diffDays, firstOfMonth, fmtShort, isTaskLate, isoDate, mondayOf, parseDate } from '../utils/dates'
 
 interface Props {
   theme:    PCTheme
@@ -175,12 +175,17 @@ export default function Gantt({ theme: t, tasks, scale, onUpdate, onSelect }: Pr
               }}
             >
               <span style={{ width: 8, height: 8, borderRadius: 2, flexShrink: 0, background: STATUS_COLOR[task.status] }} />
-              <div style={{ overflow: 'hidden' }}>
+              <div style={{ overflow: 'hidden', flex: '1 1 auto', minWidth: 0 }}>
                 <div style={{ fontSize: task.isMilestone ? 13.5 : 13, fontWeight: task.isMilestone ? 800 : 700, color: t.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {task.isMilestone && <span style={{ color: t.accent, marginRight: 5 }}>◆</span>}{task.name}
                 </div>
                 <div style={{ fontSize: 10.5, fontWeight: 600, color: t.sub }}>{task.owner || 'Unassigned'}</div>
               </div>
+              {isTaskLate(task.end, task.status) && (
+                <span style={{ flexShrink: 0, fontSize: 9.5, fontWeight: 800, color: '#fff', background: LATE_COLOR, borderRadius: 99, padding: '1px 6px', letterSpacing: 0.3 }}>
+                  LATE
+                </span>
+              )}
             </div>
           ))}
         </div>
@@ -251,6 +256,7 @@ export default function Gantt({ theme: t, tasks, scale, onUpdate, onSelect }: Pr
                 const left = diffDays(start, s) * ppd
                 const w = Math.max(ppd * 0.6, (diffDays(s, e) + 1) * ppd)
                 const color = STATUS_COLOR[task.status]
+                const late = isTaskLate(task.end, task.status)
                 return (
                   <div
                     key={task.id}
@@ -262,8 +268,8 @@ export default function Gantt({ theme: t, tasks, scale, onUpdate, onSelect }: Pr
                     style={{
                       position: 'absolute', left, top: rowY(i) + (ROW - BAR) / 2, width: w, height: BAR, borderRadius: t.barRad,
                       background: color, cursor: 'grab', display: 'flex', alignItems: 'center', overflow: 'hidden', zIndex: 4,
-                      border: task.isMilestone ? '2px solid rgba(255,255,255,.6)' : 'none',
-                      boxShadow: task.isMilestone ? '0 3px 10px rgba(20,49,94,.35)' : '0 2px 6px rgba(20,49,94,.18)',
+                      border: late ? `2px solid ${LATE_COLOR}` : task.isMilestone ? '2px solid rgba(255,255,255,.6)' : 'none',
+                      boxShadow: late ? `0 0 0 2px rgba(214,69,69,.25), 0 3px 10px rgba(20,49,94,.35)` : task.isMilestone ? '0 3px 10px rgba(20,49,94,.35)' : '0 2px 6px rgba(20,49,94,.18)',
                     }}
                   >
                     <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${task.progress || 0}%`, background: 'rgba(255,255,255,.28)' }} />

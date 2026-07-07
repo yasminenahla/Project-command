@@ -13,6 +13,9 @@ export const PRIORITY_COLOR: Record<TaskPriority, string> = {
   High:   '#E8663B',
 }
 
+// Distinct from the brand palette so a late tag never reads as a priority chip
+export const LATE_COLOR = '#D64545'
+
 // Owner-avatar hash palette
 export const BAR_PALETTE = ['#0096D6', '#7BBE28', '#F5B301', '#2AB6E6', '#14315E', '#E8663B']
 

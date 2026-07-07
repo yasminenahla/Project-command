@@ -64,4 +64,9 @@ export function uid(): string {
   return 'T' + Math.random().toString(36).slice(2, 8)
 }
 
+/** A task is late once its due date has passed and it isn't marked Done. */
+export function isTaskLate(end: string, status: string): boolean {
+  return status !== 'Done' && end < isoDate(new Date())
+}
+
 export { MONTHS, WEEKDAY_INITIALS, isoDate, parseDate }

@@ -1,7 +1,7 @@
 import { PRIORITIES, STATUSES } from '../types'
 import type { PCGroup, PCTheme, Task, TaskPriority } from '../types'
-import { STATUS_COLOR, PRIORITY_COLOR, ownerColor } from '../theme'
-import { diffDays } from '../utils/dates'
+import { STATUS_COLOR, PRIORITY_COLOR, LATE_COLOR, ownerColor } from '../theme'
+import { diffDays, isTaskLate } from '../utils/dates'
 import InlineInput from './InlineInput'
 import DepsCell from './DepsCell'
 
@@ -158,6 +158,7 @@ function TrackerRow({
   onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone,
 }: RowProps) {
   const done = task.status === 'Done'
+  const late = isTaskLate(task.end, task.status)
   const cell = (child: React.ReactNode, style?: React.CSSProperties) => (
     <td style={{ padding: '7px 8px', verticalAlign: 'middle', ...style }}>{child}</td>
   )
@@ -232,17 +233,30 @@ function TrackerRow({
       )}
 
       {cell(
-        <button
-          onClick={() => onCycleStatus(task.id)}
-          title="Click to cycle"
-          style={{
-            cursor: 'pointer', border: 'none', borderRadius: 99, padding: '5px 11px', fontSize: 11.5, fontWeight: 800,
-            whiteSpace: 'nowrap', color: '#fff', background: STATUS_COLOR[task.status], display: 'inline-flex', alignItems: 'center', gap: 6,
-          }}
-        >
-          <span style={{ width: 6, height: 6, borderRadius: 99, background: 'rgba(255,255,255,.9)' }} />
-          {task.status}
-        </button>,
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => onCycleStatus(task.id)}
+            title="Click to cycle"
+            style={{
+              cursor: 'pointer', border: 'none', borderRadius: 99, padding: '5px 11px', fontSize: 11.5, fontWeight: 800,
+              whiteSpace: 'nowrap', color: '#fff', background: STATUS_COLOR[task.status], display: 'inline-flex', alignItems: 'center', gap: 6,
+            }}
+          >
+            <span style={{ width: 6, height: 6, borderRadius: 99, background: 'rgba(255,255,255,.9)' }} />
+            {task.status}
+          </button>
+          {late && (
+            <span
+              title="Past its due date and not marked Done"
+              style={{
+                fontSize: 10.5, fontWeight: 800, color: '#fff', background: LATE_COLOR,
+                padding: '3px 8px', borderRadius: 99, whiteSpace: 'nowrap', letterSpacing: 0.3,
+              }}
+            >
+              LATE
+            </span>
+          )}
+        </div>,
       )}
 
       {cell(
@@ -287,6 +301,7 @@ function TrackerRow({
         <DateInput
           value={task.end}
           theme={t}
+          late={late}
           onChange={v => onUpdate(task.id, { end: diffDays(task.start, v) < 0 ? task.start : v })}
         />,
       )}
@@ -358,15 +373,16 @@ function TrackerRow({
   )
 }
 
-function DateInput({ value, onChange, theme: t }: { value: string; onChange: (v: string) => void; theme: PCTheme }) {
+function DateInput({ value, onChange, theme: t, late }: { value: string; onChange: (v: string) => void; theme: PCTheme; late?: boolean }) {
   return (
     <input
       type="date"
       value={value}
       onChange={e => e.target.value && onChange(e.target.value)}
       style={{
-        border: `1px solid ${t.border}`, background: t.panel, color: t.text, borderRadius: 7, padding: '5px 7px',
-        fontSize: 12, fontWeight: 600, outline: 'none', fontFamily: "'DM Mono',monospace", colorScheme: t.dark ? 'dark' : 'light',
+        border: `1px solid ${late ? LATE_COLOR : t.border}`, background: t.panel, color: late ? LATE_COLOR : t.text,
+        borderRadius: 7, padding: '5px 7px', fontSize: 12, fontWeight: late ? 800 : 600, outline: 'none',
+        fontFamily: "'DM Mono',monospace", colorScheme: t.dark ? 'dark' : 'light',
       }}
     />
   )
