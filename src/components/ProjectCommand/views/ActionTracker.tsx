@@ -28,7 +28,7 @@ interface Props {
   onAddSubtask:   (parentTaskId: string) => void
 }
 
-const COLS = ['', '', 'Task', 'Owner', 'Status', 'Priority', 'Milestone', 'Start', 'Due', 'Progress', 'Tags', 'Deps', 'Notes', '']
+const COLS = ['', '', 'Task', 'Owner', 'Status', 'Priority', 'Milestone', 'Start', 'Due', 'Progress', 'Deps', 'Notes', '']
 const STATUS_C_DONE = STATUS_COLOR.Done
 
 export default function ActionTracker({
@@ -103,7 +103,7 @@ export default function ActionTracker({
           {groups.flatMap(([g, list]) => [
             g != null && (
               <tr key={`g${g}`}>
-                <td colSpan={14} style={{ padding: '11px 14px 7px' }}>
+                <td colSpan={13} style={{ padding: '11px 14px 7px' }}>
                   <span style={{ fontSize: 12, fontWeight: 800, color: t.text, letterSpacing: 0.3 }}>{g}</span>
                   <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: t.sub, background: t.chip, padding: '2px 8px', borderRadius: 99 }}>
                     {list.length}
@@ -349,15 +349,6 @@ function TrackerRow({
           />
           <span style={{ fontSize: 11, color: t.sub, fontWeight: 700 }}>%</span>
         </div>,
-      )}
-
-      {cell(
-        <InlineInput
-          value={(task.tags || []).join(', ')}
-          onCommit={v => onUpdate(task.id, { tags: v.split(',').map(s => s.trim()).filter(Boolean) })}
-          theme={t}
-          style={{ width: 110, fontSize: 12, color: t.sub }}
-        />,
       )}
 
       {cell(
