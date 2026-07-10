@@ -154,11 +154,30 @@ export function useProjectCommand() {
     update(id, { milestoneId })
   }, [update])
 
+  const addSubtask = useCallback((parentTaskId: string) => {
+    const parentIndex = tasks.findIndex(t => t.id === parentTaskId)
+    if (parentIndex === -1) return
+    const parent = tasks[parentIndex]
+    let insertAt = parentIndex + 1
+    while (insertAt < tasks.length && tasks[insertAt].parentTaskId === parentTaskId) insertAt++
+    const nt: Task = {
+      id: uid(), name: 'New subtask', owner: parent.owner, status: 'Not started', priority: parent.priority,
+      start: parent.start, end: parent.end, progress: 0, deps: [], tags: [], notes: '',
+      parentTaskId,
+    }
+    const next = tasks.slice()
+    next.splice(insertAt, 0, nt)
+    setTasks(next)
+    setSel(nt.id)
+    flash('Subtask added')
+  }, [tasks, setTasks, flash])
+
   const del = useCallback((id: string) => {
     setTasks(tasks.filter(t => t.id !== id).map(t => ({
       ...t,
       deps: t.deps.filter(d => d !== id),
       milestoneId: t.milestoneId === id ? null : t.milestoneId,
+      parentTaskId: t.parentTaskId === id ? null : t.parentTaskId,
     })))
   }, [tasks, setTasks])
 
@@ -271,7 +290,7 @@ export function useProjectCommand() {
     tasks, filtered, theme, tab, scale, group, q, depsFor, sel, toast, refreshing,
     milestones, hierarchicalFiltered,
     setTheme, setTab, setScale, setGroup, setQ, setDepsFor, setSel, flash,
-    taskName, update, addTask, addMilestone, setMilestone, del, move, startDragReorder, dropReorder,
+    taskName, update, addTask, addMilestone, addSubtask, setMilestone, del, move, startDragReorder, dropReorder,
     cycleStatus, toggleDone, toggleDep, importTasks, setTasks, share, refresh,
   }
 }

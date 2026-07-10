@@ -75,6 +75,37 @@ export default function Timeline({ theme: t, tasks: filtered, onSelect }: Props)
               </div>
             )}
           </div>
+        ) : row.kind === 'rolledTask' ? (
+          <div
+            onClick={() => onSelect(row.task.id)}
+            style={{
+              background: t.panel, border: `1px solid ${t.border}`, borderRadius: t.radius, padding: '14px 16px',
+              boxShadow: t.shadow, cursor: 'pointer', borderLeft: `5px solid ${dotColor}`, transition: 'transform .15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)' }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'none' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, justifyContent: left ? 'flex-end' : 'flex-start', flexDirection: left ? 'row-reverse' : 'row' }}>
+              <span style={{ fontSize: 14.5, fontWeight: 800, color: t.text }}>{row.task.name}</span>
+              {isTaskLate(row.task.end, row.task.status) && (
+                <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: LATE_COLOR, padding: '2px 8px', borderRadius: 99, whiteSpace: 'nowrap', letterSpacing: 0.3 }}>
+                  LATE
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: t.sub, fontFamily: "'DM Mono',monospace", textAlign: left ? 'right' : 'left', marginBottom: 10 }}>
+              {fmtShort(row.task.start)} → {fmtShort(row.task.end)}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexDirection: left ? 'row-reverse' : 'row' }}>
+              <div style={{ flex: 1, height: 8, borderRadius: 99, background: t.line, overflow: 'hidden' }}>
+                <div style={{ width: `${row.completion}%`, height: '100%', borderRadius: 99, background: dotColor, transition: 'width .2s' }} />
+              </div>
+              <span style={{ fontSize: 13, fontWeight: 800, color: dotColor, whiteSpace: 'nowrap' }}>{row.completion}%</span>
+            </div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: t.sub, marginTop: 6, textAlign: left ? 'right' : 'left' }}>
+              {row.children.length} subtask{row.children.length === 1 ? '' : 's'}
+            </div>
+          </div>
         ) : (() => {
           const task = row.task
           const done = task.status === 'Done'

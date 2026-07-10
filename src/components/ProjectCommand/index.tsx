@@ -70,6 +70,7 @@ export default function ProjectCommand({ onExit }: Props = {}) {
             onToggleDep={pc.toggleDep}
             onSetDepsFor={pc.setDepsFor}
             onSetMilestone={pc.setMilestone}
+            onAddSubtask={pc.addSubtask}
           />
         )}
         {pc.tab === 'gantt' && (

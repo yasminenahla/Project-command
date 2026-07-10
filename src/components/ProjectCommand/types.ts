@@ -15,6 +15,7 @@ export interface Task {
   notes:    string
   isMilestone?: boolean  // marks this task as a key milestone (a group header for other tasks)
   milestoneId?: string | null  // id of the milestone task this task falls under, if any
+  parentTaskId?: string | null  // id of the task this is a subtask of, if any (one level deep)
 }
 
 export type PCThemeName = 'minimal' | 'playful' | 'bold'

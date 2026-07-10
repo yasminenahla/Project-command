@@ -2,6 +2,7 @@ import { PRIORITIES, STATUSES } from '../types'
 import type { PCGroup, PCTheme, Task, TaskPriority } from '../types'
 import { STATUS_COLOR, PRIORITY_COLOR, LATE_COLOR, ownerColor } from '../theme'
 import { diffDays, isTaskLate } from '../utils/dates'
+import { taskIndentLevel } from '../utils/hierarchy'
 import InlineInput from './InlineInput'
 import DepsCell from './DepsCell'
 
@@ -24,6 +25,7 @@ interface Props {
   onToggleDep:   (id: string, depId: string) => void
   onSetDepsFor:  (id: string | null) => void
   onSetMilestone: (id: string, milestoneId: string | null) => void
+  onAddSubtask:   (parentTaskId: string) => void
 }
 
 const COLS = ['', '', 'Task', 'Owner', 'Status', 'Priority', 'Milestone', 'Start', 'Due', 'Progress', 'Tags', 'Deps', 'Notes', '']
@@ -31,22 +33,31 @@ const STATUS_C_DONE = STATUS_COLOR.Done
 
 export default function ActionTracker({
   theme: t, tasks, allTasks, milestones, group, sel, depsFor, taskName,
-  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone,
+  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone, onAddSubtask,
 }: Props) {
   const grouped = group !== 'None'
   const groupByMilestone = group === 'Milestone'
+  const showHierarchy = group === 'None' || groupByMilestone
+  const byId = new Map(allTasks.map(t => [t.id, t]))
 
   let groups: [string | null, Task[]][]
   if (groupByMilestone) {
-    const byId = new Map(milestones.map(m => [m.id, m]))
+    const milestoneById = new Map(milestones.map(m => [m.id, m]))
+    const subtasksOf = new Map<string, Task[]>()
+    for (const x of tasks) {
+      if (!x.isMilestone && x.parentTaskId) {
+        (subtasksOf.get(x.parentTaskId) ?? subtasksOf.set(x.parentTaskId, []).get(x.parentTaskId)!).push(x)
+      }
+    }
+    const withSubtasks = (x: Task) => [x, ...(subtasksOf.get(x.id) ?? [])]
+    const rootTasks = tasks.filter(x => !x.isMilestone && !x.parentTaskId)
     const childMap = new Map<string, Task[]>()
     const unassigned: Task[] = []
-    for (const x of tasks) {
-      if (x.isMilestone) continue
-      if (x.milestoneId && byId.has(x.milestoneId)) {
-        (childMap.get(x.milestoneId) ?? childMap.set(x.milestoneId, []).get(x.milestoneId)!).push(x)
+    for (const x of rootTasks) {
+      if (x.milestoneId && milestoneById.has(x.milestoneId)) {
+        (childMap.get(x.milestoneId) ?? childMap.set(x.milestoneId, []).get(x.milestoneId)!).push(...withSubtasks(x))
       } else {
-        unassigned.push(x)
+        unassigned.push(...withSubtasks(x))
       }
     }
     groups = milestones
@@ -106,7 +117,7 @@ export default function ActionTracker({
                 task={task}
                 theme={t}
                 grouped={grouped}
-                indent={groupByMilestone && !task.isMilestone}
+                indentLevel={showHierarchy ? taskIndentLevel(task, byId) : 0}
                 selected={sel === task.id}
                 depsOpen={depsFor === task.id}
                 allTasks={allTasks}
@@ -122,6 +133,7 @@ export default function ActionTracker({
                 onToggleDep={onToggleDep}
                 onSetDepsFor={onSetDepsFor}
                 onSetMilestone={onSetMilestone}
+                onAddSubtask={onAddSubtask}
               />
             )),
           ])}
@@ -135,7 +147,7 @@ interface RowProps {
   task:       Task
   theme:      PCTheme
   grouped:    boolean
-  indent:     boolean
+  indentLevel: number
   selected:   boolean
   depsOpen:   boolean
   allTasks:   Task[]
@@ -151,11 +163,12 @@ interface RowProps {
   onToggleDep:   (id: string, depId: string) => void
   onSetDepsFor:  (id: string | null) => void
   onSetMilestone: (id: string, milestoneId: string | null) => void
+  onAddSubtask:   (parentTaskId: string) => void
 }
 
 function TrackerRow({
-  task, theme: t, grouped, indent, selected, depsOpen, allTasks, milestones, taskName,
-  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone,
+  task, theme: t, grouped, indentLevel, selected, depsOpen, allTasks, milestones, taskName,
+  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone, onAddSubtask,
 }: RowProps) {
   const done = task.status === 'Done'
   const late = isTaskLate(task.end, task.status)
@@ -206,7 +219,7 @@ function TrackerRow({
       )}
 
       {cell(
-        <div style={{ paddingLeft: indent ? 18 : 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: indentLevel * 18 }}>
           <InlineInput
             value={task.name}
             onCommit={v => onUpdate(task.id, { name: v })}
@@ -216,6 +229,18 @@ function TrackerRow({
               textDecoration: done ? 'line-through' : 'none', opacity: done ? 0.6 : 1,
             }}
           />
+          {!task.isMilestone && !task.parentTaskId && (
+            <button
+              onClick={() => onAddSubtask(task.id)}
+              title="Add subtask"
+              style={{
+                cursor: 'pointer', border: `1px solid ${t.border}`, background: 'transparent', color: t.sub,
+                borderRadius: 6, fontSize: 11, fontWeight: 800, lineHeight: 1, padding: '3px 6px', flexShrink: 0,
+              }}
+            >
+              + sub
+            </button>
+          )}
         </div>,
         { minWidth: 200 },
       )}

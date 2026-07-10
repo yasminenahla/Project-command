@@ -3,6 +3,7 @@ import type { PCScale, PCTheme, Task } from '../types'
 import { STATUSES } from '../types'
 import { STATUS_COLOR, LATE_COLOR } from '../theme'
 import { MONTHS, WEEKDAY_INITIALS, addDays, daysInMonth, diffDays, firstOfMonth, fmtShort, isTaskLate, isoDate, mondayOf, parseDate } from '../utils/dates'
+import { taskIndentLevel } from '../utils/hierarchy'
 
 interface Props {
   theme:    PCTheme
@@ -148,6 +149,7 @@ export default function Gantt({ theme: t, tasks, scale, onUpdate, onSelect }: Pr
   }
 
   const { start, W, todayX, cols, months, arrows, gridH } = geometry
+  const byId = new Map(tasks.map(x => [x.id, x]))
 
   function taskDates(task: Task): { s: string; e: string } {
     if (preview && preview.id === task.id) return { s: preview.start, e: preview.end }
@@ -170,13 +172,13 @@ export default function Gantt({ theme: t, tasks, scale, onUpdate, onSelect }: Pr
               key={task.id}
               style={{
                 height: ROW, display: 'flex', alignItems: 'center', gap: 9, borderBottom: `1px solid ${t.line}`,
-                padding: `0 14px 0 ${task.isMilestone ? 14 : task.milestoneId ? 28 : 14}px`,
+                padding: `0 14px 0 ${14 + taskIndentLevel(task, byId) * 14}px`,
                 background: task.isMilestone ? t.chip : 'transparent',
               }}
             >
               <span style={{ width: 8, height: 8, borderRadius: 2, flexShrink: 0, background: STATUS_COLOR[task.status] }} />
               <div style={{ overflow: 'hidden', flex: '1 1 auto', minWidth: 0 }}>
-                <div style={{ fontSize: task.isMilestone ? 13.5 : 13, fontWeight: task.isMilestone ? 800 : 700, color: t.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ fontSize: task.isMilestone ? 13.5 : task.parentTaskId ? 12.5 : 13, fontWeight: task.isMilestone ? 800 : 700, color: task.parentTaskId ? t.sub : t.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {task.isMilestone && <span style={{ color: t.accent, marginRight: 5 }}>◆</span>}{task.name}
                 </div>
                 <div style={{ fontSize: 10.5, fontWeight: 600, color: t.sub }}>{task.owner || 'Unassigned'}</div>
@@ -257,6 +259,8 @@ export default function Gantt({ theme: t, tasks, scale, onUpdate, onSelect }: Pr
                 const w = Math.max(ppd * 0.6, (diffDays(s, e) + 1) * ppd)
                 const color = STATUS_COLOR[task.status]
                 const late = isTaskLate(task.end, task.status)
+                const sub = !!task.parentTaskId
+                const barH = sub ? BAR * 0.7 : BAR
                 return (
                   <div
                     key={task.id}
@@ -266,8 +270,9 @@ export default function Gantt({ theme: t, tasks, scale, onUpdate, onSelect }: Pr
                     }}
                     onClick={() => onSelect(task.id)}
                     style={{
-                      position: 'absolute', left, top: rowY(i) + (ROW - BAR) / 2, width: w, height: BAR, borderRadius: t.barRad,
+                      position: 'absolute', left, top: rowY(i) + (ROW - barH) / 2, width: w, height: barH, borderRadius: t.barRad,
                       background: color, cursor: 'grab', display: 'flex', alignItems: 'center', overflow: 'hidden', zIndex: 4,
+                      opacity: sub ? 0.85 : 1,
                       border: late ? `2px solid ${LATE_COLOR}` : task.isMilestone ? '2px solid rgba(255,255,255,.6)' : 'none',
                       boxShadow: late ? `0 0 0 2px rgba(214,69,69,.25), 0 3px 10px rgba(20,49,94,.35)` : task.isMilestone ? '0 3px 10px rgba(20,49,94,.35)' : '0 2px 6px rgba(20,49,94,.18)',
                     }}
