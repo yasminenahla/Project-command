@@ -1,4 +1,4 @@
-import type { PCThemeName, Task } from '../types'
+import type { PCRole, PCThemeName, Task } from '../types'
 
 export interface SharePayload {
   tasks: Task[]
@@ -11,10 +11,10 @@ function fromBase64Url(str: string): string {
   return decodeURIComponent(escape(atob(padded)))
 }
 
-/** Builds a URL carrying a live share id as a `#s=` fragment — opening it always fetches the latest board. */
-export function buildShareUrl(id: string): string {
+/** Builds a URL carrying a live share id and access role as a `#s=&role=` fragment — opening it always fetches the latest board. */
+export function buildShareUrl(id: string, role: PCRole = 'editor'): string {
   const url = new URL(window.location.href)
-  url.hash = `s=${id}`
+  url.hash = `s=${id}&role=${role}`
   return url.toString()
 }
 
@@ -22,6 +22,12 @@ export function buildShareUrl(id: string): string {
 export function readShareIdFromLocation(): string | null {
   const hash = window.location.hash.replace(/^#/, '')
   return new URLSearchParams(hash).get('s')
+}
+
+/** Reads the `role` a share link grants — defaults to 'editor' so older links (sent before this feature) keep working as before. */
+export function readShareRoleFromLocation(): PCRole {
+  const hash = window.location.hash.replace(/^#/, '')
+  return new URLSearchParams(hash).get('role') === 'viewer' ? 'viewer' : 'editor'
 }
 
 /**

@@ -22,6 +22,7 @@ export default function ProjectCommand({ onExit }: Props = {}) {
   }
 
   async function handleImport(file: File) {
+    if (pc.role === 'viewer') { pc.flash('This is a view-only board — importing is disabled'); return }
     try {
       const tasks = await importTasksXlsx(file)
       pc.importTasks(tasks)
@@ -35,9 +36,11 @@ export default function ProjectCommand({ onExit }: Props = {}) {
     pc.flash(`Exported Excel · ${pc.tasks.length} tasks`)
   }
 
+  const readOnly = pc.role === 'viewer'
+
   return (
     <div style={{ minHeight: '100vh', background: t.appBg, color: t.text, fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}>
-      <PCHeader theme={pc.theme} onTheme={pc.setTheme} onImport={handleImport} onExport={handleExport} onShare={pc.share} onExit={onExit} />
+      <PCHeader theme={pc.theme} onTheme={pc.setTheme} onImport={handleImport} onExport={handleExport} onShare={pc.share} role={pc.role} onExit={onExit} />
       <Toolbar
         theme={t}
         tab={pc.tab} onTab={pc.setTab}
@@ -48,6 +51,7 @@ export default function ProjectCommand({ onExit }: Props = {}) {
         onAddMilestone={pc.addMilestone}
         onRefresh={pc.refresh}
         refreshing={pc.refreshing}
+        readOnly={readOnly}
       />
       <div style={{ padding: '0 22px 60px' }}>
         {pc.tab === 'tracker' && (
@@ -71,10 +75,11 @@ export default function ProjectCommand({ onExit }: Props = {}) {
             onSetDepsFor={pc.setDepsFor}
             onSetMilestone={pc.setMilestone}
             onAddSubtask={pc.addSubtask}
+            readOnly={readOnly}
           />
         )}
         {pc.tab === 'gantt' && (
-          <Gantt theme={t} tasks={pc.hierarchicalFiltered} scale={pc.scale} onUpdate={pc.update} onSelect={selectTask} />
+          <Gantt theme={t} tasks={pc.hierarchicalFiltered} scale={pc.scale} onUpdate={pc.update} onSelect={selectTask} readOnly={readOnly} />
         )}
         {pc.tab === 'timeline' && (
           <Timeline theme={t} tasks={pc.filtered} onSelect={selectTask} />

@@ -22,6 +22,7 @@ export type PCThemeName = 'minimal' | 'playful' | 'bold'
 export type PCTab        = 'timeline' | 'tracker' | 'gantt'
 export type PCScale       = 'days' | 'weeks' | 'months'
 export type PCGroup       = 'None' | 'Status' | 'Owner' | 'Priority' | 'Milestone'
+export type PCRole        = 'editor' | 'viewer'
 
 export interface PCTheme {
   label:      string

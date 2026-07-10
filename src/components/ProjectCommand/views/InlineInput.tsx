@@ -7,15 +7,17 @@ interface Props {
   onCommit: (v: string) => void
   theme:    PCTheme
   style?:   CSSProperties
+  disabled?: boolean
 }
 
-export default function InlineInput({ value, onCommit, theme: t, style }: Props) {
+export default function InlineInput({ value, onCommit, theme: t, style, disabled }: Props) {
   const [focused, setFocused] = useState(false)
 
   return (
     <input
       defaultValue={value}
       key={value}
+      disabled={disabled}
       onFocus={() => setFocused(true)}
       onBlur={e => {
         setFocused(false)
@@ -25,7 +27,7 @@ export default function InlineInput({ value, onCommit, theme: t, style }: Props)
       style={{
         border: '1px solid transparent', background: 'transparent', color: t.text, borderRadius: 7,
         padding: '6px 8px', fontSize: 13, fontWeight: 600, width: '100%', outline: 'none',
-        transition: 'all .12s',
+        transition: 'all .12s', opacity: disabled ? 0.7 : 1, cursor: disabled ? 'default' : 'text',
         ...(focused ? { background: t.panel2, borderColor: t.border } : {}),
         ...style,
       }}

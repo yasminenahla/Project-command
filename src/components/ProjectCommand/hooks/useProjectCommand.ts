@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { PCGroup, PCScale, PCTab, PCThemeName, Task, TaskStatus } from '../types'
+import type { PCGroup, PCRole, PCScale, PCTab, PCThemeName, Task, TaskStatus } from '../types'
 import { STATUSES } from '../types'
 import { seedTasks } from '../seed'
 import { addDays, uid } from '../utils/dates'
-import { buildShareUrl, clearShareFromLocation, readLegacySnapshotFromLocation, readShareIdFromLocation } from '../utils/shareLink'
+import { buildShareUrl, clearShareFromLocation, readLegacySnapshotFromLocation, readShareIdFromLocation, readShareRoleFromLocation } from '../utils/shareLink'
 import { createShare, fetchShare, updateShare } from '../utils/liveShare'
 import { buildHierarchicalOrder } from '../utils/hierarchy'
 
@@ -16,6 +16,7 @@ interface Persisted {
   scale: PCScale
   group: PCGroup
   shareId?: string  // jsonblob id this board auto-syncs to, once shared
+  role:  PCRole     // this browser's access level on the current board — 'viewer' if opened via a view-only link
 }
 
 function load(): Persisted {
@@ -31,11 +32,12 @@ function load(): Persisted {
           scale: s.scale ?? 'weeks',
           group: s.group ?? 'None',
           shareId: s.shareId,
+          role: s.role ?? 'editor',
         }
       }
     }
   } catch { /* fall through to seed */ }
-  return { tasks: seedTasks(), theme: 'playful', tab: 'tracker', scale: 'weeks', group: 'None' }
+  return { tasks: seedTasks(), theme: 'playful', tab: 'tracker', scale: 'weeks', group: 'None', role: 'editor' }
 }
 
 export function useProjectCommand() {
@@ -68,12 +70,13 @@ export function useProjectCommand() {
     async function hydrate() {
       const id = readShareIdFromLocation()
       if (id) {
+        const role = readShareRoleFromLocation()
         try {
           const remote = await fetchShare(id)
           if (cancelled) return
           if (remote?.tasks?.length) {
-            setPersisted(p => ({ ...p, tasks: remote.tasks, theme: remote.theme ?? p.theme, shareId: id }))
-            flash(`Loaded shared board · ${remote.tasks.length} tasks`)
+            setPersisted(p => ({ ...p, tasks: remote.tasks, theme: remote.theme ?? p.theme, shareId: id, role }))
+            flash(role === 'viewer' ? `Viewing shared board (read-only) · ${remote.tasks.length} tasks` : `Loaded shared board · ${remote.tasks.length} tasks`)
           } else {
             flash('That share link looks empty or invalid')
           }
@@ -94,12 +97,13 @@ export function useProjectCommand() {
     return () => { cancelled = true }
   }, [])
 
-  const { tasks, theme, tab, scale, group, shareId } = persisted
+  const { tasks, theme, tab, scale, group, shareId, role } = persisted
 
   // Once a board is shared, keep the remote copy fresh as it's edited —
   // debounced so rapid edits collapse into one sync a little after they stop.
+  // Viewers never write back — they only ever pull.
   useEffect(() => {
-    if (!shareId) return
+    if (!shareId || role === 'viewer') return
     clearTimeout(syncTimer.current)
     syncTimer.current = setTimeout(() => {
       updateShare(shareId, { tasks, theme }).catch(() => {
@@ -107,7 +111,7 @@ export function useProjectCommand() {
       })
     }, 1200)
     return () => clearTimeout(syncTimer.current)
-  }, [shareId, tasks, theme, flash])
+  }, [shareId, tasks, theme, role, flash])
 
   const setTasks = useCallback((next: Task[]) => {
     setPersisted(p => ({ ...p, tasks: next }))
@@ -231,19 +235,22 @@ export function useProjectCommand() {
     flash(`Imported ${imported.length} tasks`)
   }, [setTasks, flash])
 
-  const share = useCallback(async () => {
+  const share = useCallback(async (requestedRole: PCRole = 'editor') => {
+    // A viewer can only ever hand out further view-only links — they have no edit
+    // access of their own to grant, so any request is downgraded to 'viewer'.
+    const linkRole: PCRole = role === 'viewer' ? 'viewer' : requestedRole
     try {
       let id = shareId
       if (!id) {
         id = await createShare({ tasks, theme })
         setPersisted(p => ({ ...p, shareId: id }))
-      } else {
+      } else if (role !== 'viewer') {
         await updateShare(id, { tasks, theme })
       }
-      const url = buildShareUrl(id)
+      const url = buildShareUrl(id, linkRole)
       try {
         await navigator.clipboard.writeText(url)
-        flash('Share link copied — it stays up to date as you edit')
+        flash(linkRole === 'viewer' ? 'View-only link copied' : 'Share link copied — it stays up to date as you edit')
       } catch {
         flash('Link ready but could not copy it — copy it from your address bar')
       }
@@ -251,7 +258,7 @@ export function useProjectCommand() {
       console.error('[ProjectCommand] share failed:', err)
       flash(`Could not create the share link: ${err instanceof Error ? err.message : 'unknown error'}`)
     }
-  }, [tasks, theme, shareId, flash])
+  }, [tasks, theme, shareId, role, flash])
 
   const refresh = useCallback(async () => {
     if (!shareId) {
@@ -287,7 +294,7 @@ export function useProjectCommand() {
   const hierarchicalFiltered = useMemo(() => buildHierarchicalOrder(filtered), [filtered])
 
   return {
-    tasks, filtered, theme, tab, scale, group, q, depsFor, sel, toast, refreshing,
+    tasks, filtered, theme, tab, scale, group, q, depsFor, sel, toast, refreshing, role,
     milestones, hierarchicalFiltered,
     setTheme, setTab, setScale, setGroup, setQ, setDepsFor, setSel, flash,
     taskName, update, addTask, addMilestone, addSubtask, setMilestone, del, move, startDragReorder, dropReorder,

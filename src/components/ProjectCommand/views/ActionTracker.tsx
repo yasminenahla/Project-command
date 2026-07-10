@@ -26,6 +26,7 @@ interface Props {
   onSetDepsFor:  (id: string | null) => void
   onSetMilestone: (id: string, milestoneId: string | null) => void
   onAddSubtask:   (parentTaskId: string) => void
+  readOnly?: boolean
 }
 
 const COLS = ['', '', 'Task', 'Owner', 'Status', 'Priority', 'Milestone', 'Start', 'Due', 'Progress', 'Deps', 'Notes', '']
@@ -33,7 +34,7 @@ const STATUS_C_DONE = STATUS_COLOR.Done
 
 export default function ActionTracker({
   theme: t, tasks, allTasks, milestones, group, sel, depsFor, taskName,
-  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone, onAddSubtask,
+  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone, onAddSubtask, readOnly,
 }: Props) {
   const grouped = group !== 'None'
   const groupByMilestone = group === 'Milestone'
@@ -134,6 +135,7 @@ export default function ActionTracker({
                 onSetDepsFor={onSetDepsFor}
                 onSetMilestone={onSetMilestone}
                 onAddSubtask={onAddSubtask}
+                readOnly={readOnly}
               />
             )),
           ])}
@@ -164,11 +166,12 @@ interface RowProps {
   onSetDepsFor:  (id: string | null) => void
   onSetMilestone: (id: string, milestoneId: string | null) => void
   onAddSubtask:   (parentTaskId: string) => void
+  readOnly?: boolean
 }
 
 function TrackerRow({
   task, theme: t, grouped, indentLevel, selected, depsOpen, allTasks, milestones, taskName,
-  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone, onAddSubtask,
+  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone, onAddSubtask, readOnly,
 }: RowProps) {
   const done = task.status === 'Done'
   const late = isTaskLate(task.end, task.status)
@@ -178,7 +181,7 @@ function TrackerRow({
 
   return (
     <tr
-      draggable={!grouped}
+      draggable={!grouped && !readOnly}
       onDragStart={() => onDragStart(task.id)}
       onDragOver={e => e.preventDefault()}
       onDrop={() => onDrop(task.id)}
@@ -191,10 +194,10 @@ function TrackerRow({
       {cell(
         !grouped ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-            <span style={{ cursor: 'grab', color: t.sub, fontSize: 13, lineHeight: 0.8, letterSpacing: -2 }}>⠿</span>
+            <span style={{ cursor: readOnly ? 'default' : 'grab', color: t.sub, fontSize: 13, lineHeight: 0.8, letterSpacing: -2, opacity: readOnly ? 0.4 : 1 }}>⠿</span>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <button onClick={() => onMove(task.id, -1)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: t.sub, fontSize: 9, lineHeight: 0.7, padding: 0 }}>▲</button>
-              <button onClick={() => onMove(task.id, 1)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: t.sub, fontSize: 9, lineHeight: 0.7, padding: 0 }}>▼</button>
+              <button onClick={() => onMove(task.id, -1)} disabled={readOnly} style={{ border: 'none', background: 'none', cursor: readOnly ? 'default' : 'pointer', color: t.sub, fontSize: 9, lineHeight: 0.7, padding: 0, opacity: readOnly ? 0.4 : 1 }}>▲</button>
+              <button onClick={() => onMove(task.id, 1)} disabled={readOnly} style={{ border: 'none', background: 'none', cursor: readOnly ? 'default' : 'pointer', color: t.sub, fontSize: 9, lineHeight: 0.7, padding: 0, opacity: readOnly ? 0.4 : 1 }}>▼</button>
             </div>
           </div>
         ) : task.isMilestone ? (
@@ -206,11 +209,13 @@ function TrackerRow({
       {cell(
         <button
           onClick={() => onToggleDone(task.id)}
+          disabled={readOnly}
           title="Toggle done"
           style={{
-            width: 20, height: 20, borderRadius: 6, cursor: 'pointer',
+            width: 20, height: 20, borderRadius: 6, cursor: readOnly ? 'default' : 'pointer',
             border: `2px solid ${done ? STATUS_C_DONE : t.border}`, background: done ? STATUS_C_DONE : 'transparent',
             color: '#fff', fontSize: 12, fontWeight: 800, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            opacity: readOnly ? 0.6 : 1,
           }}
         >
           {done ? '✓' : ''}
@@ -224,12 +229,13 @@ function TrackerRow({
             value={task.name}
             onCommit={v => onUpdate(task.id, { name: v })}
             theme={t}
+            disabled={readOnly}
             style={{
               fontWeight: task.isMilestone ? 800 : 700, fontSize: task.isMilestone ? 14 : 13.5, minWidth: 180,
               textDecoration: done ? 'line-through' : 'none', opacity: done ? 0.6 : 1,
             }}
           />
-          {!task.isMilestone && !task.parentTaskId && (
+          {!readOnly && !task.isMilestone && !task.parentTaskId && (
             <button
               onClick={() => onAddSubtask(task.id)}
               title="Add subtask"
@@ -253,7 +259,7 @@ function TrackerRow({
           }}>
             {task.owner ? task.owner[0].toUpperCase() : '?'}
           </span>
-          <InlineInput value={task.owner} onCommit={v => onUpdate(task.id, { owner: v })} theme={t} style={{ width: 88, fontSize: 12.5 }} />
+          <InlineInput value={task.owner} onCommit={v => onUpdate(task.id, { owner: v })} theme={t} disabled={readOnly} style={{ width: 88, fontSize: 12.5 }} />
         </div>,
       )}
 
@@ -261,10 +267,12 @@ function TrackerRow({
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <button
             onClick={() => onCycleStatus(task.id)}
+            disabled={readOnly}
             title="Click to cycle"
             style={{
-              cursor: 'pointer', border: 'none', borderRadius: 99, padding: '5px 11px', fontSize: 11.5, fontWeight: 800,
+              cursor: readOnly ? 'default' : 'pointer', border: 'none', borderRadius: 99, padding: '5px 11px', fontSize: 11.5, fontWeight: 800,
               whiteSpace: 'nowrap', color: '#fff', background: STATUS_COLOR[task.status], display: 'inline-flex', alignItems: 'center', gap: 6,
+              opacity: readOnly ? 0.75 : 1,
             }}
           >
             <span style={{ width: 6, height: 6, borderRadius: 99, background: 'rgba(255,255,255,.9)' }} />
@@ -288,9 +296,11 @@ function TrackerRow({
         <select
           value={task.priority}
           onChange={e => onUpdate(task.id, { priority: e.target.value as TaskPriority })}
+          disabled={readOnly}
           style={{
             border: `1px solid ${PRIORITY_COLOR[task.priority]}`, background: 'transparent', color: PRIORITY_COLOR[task.priority],
-            borderRadius: 8, padding: '5px 6px', fontSize: 12, fontWeight: 800, cursor: 'pointer', outline: 'none',
+            borderRadius: 8, padding: '5px 6px', fontSize: 12, fontWeight: 800, cursor: readOnly ? 'default' : 'pointer', outline: 'none',
+            opacity: readOnly ? 0.75 : 1,
           }}
         >
           {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
@@ -304,9 +314,11 @@ function TrackerRow({
           <select
             value={task.milestoneId ?? ''}
             onChange={e => onSetMilestone(task.id, e.target.value || null)}
+            disabled={readOnly}
             style={{
               border: `1px solid ${t.border}`, background: t.panel, color: t.text, borderRadius: 8,
-              padding: '5px 6px', fontSize: 12, fontWeight: 600, cursor: 'pointer', outline: 'none', maxWidth: 130,
+              padding: '5px 6px', fontSize: 12, fontWeight: 600, cursor: readOnly ? 'default' : 'pointer', outline: 'none', maxWidth: 130,
+              opacity: readOnly ? 0.75 : 1,
             }}
           >
             <option value="">— none —</option>
@@ -319,6 +331,7 @@ function TrackerRow({
         <DateInput
           value={task.start}
           theme={t}
+          disabled={readOnly}
           onChange={v => onUpdate(task.id, { start: v, end: diffDays(v, task.end) < 0 ? v : task.end })}
         />,
       )}
@@ -327,6 +340,7 @@ function TrackerRow({
           value={task.end}
           theme={t}
           late={late}
+          disabled={readOnly}
           onChange={v => onUpdate(task.id, { end: diffDays(task.start, v) < 0 ? task.start : v })}
         />,
       )}
@@ -341,11 +355,12 @@ function TrackerRow({
             min={0}
             max={100}
             value={task.progress}
+            disabled={readOnly}
             onChange={e => {
               const v = Math.max(0, Math.min(100, +e.target.value || 0))
               onUpdate(task.id, { progress: v, status: v === 100 ? 'Done' : (v > 0 && task.status === 'Not started' ? 'In progress' : task.status) })
             }}
-            style={{ width: 44, border: `1px solid ${t.border}`, background: t.panel, color: t.text, borderRadius: 6, padding: '4px 4px', fontSize: 12, fontWeight: 700, textAlign: 'right', outline: 'none' }}
+            style={{ width: 44, border: `1px solid ${t.border}`, background: t.panel, color: t.text, borderRadius: 6, padding: '4px 4px', fontSize: 12, fontWeight: 700, textAlign: 'right', outline: 'none', opacity: readOnly ? 0.7 : 1 }}
           />
           <span style={{ fontSize: 11, color: t.sub, fontWeight: 700 }}>%</span>
         </div>,
@@ -361,6 +376,7 @@ function TrackerRow({
           onClose={() => onSetDepsFor(null)}
           onToggleDep={depId => onToggleDep(task.id, depId)}
           taskName={taskName}
+          disabled={readOnly}
         />,
         { position: 'relative' },
       )}
@@ -370,35 +386,39 @@ function TrackerRow({
           value={task.notes}
           onCommit={v => onUpdate(task.id, { notes: v })}
           theme={t}
+          disabled={readOnly}
           style={{ width: 200, fontSize: 12, color: t.sub }}
         />,
         { minWidth: 180 },
       )}
 
       {cell(
-        <button
-          onClick={() => onDelete(task.id)}
-          title="Delete"
-          style={{ cursor: 'pointer', border: 'none', background: 'none', color: t.sub, fontSize: 15, opacity: 0.6, padding: '4px 6px' }}
-        >
-          ✕
-        </button>,
+        !readOnly && (
+          <button
+            onClick={() => onDelete(task.id)}
+            title="Delete"
+            style={{ cursor: 'pointer', border: 'none', background: 'none', color: t.sub, fontSize: 15, opacity: 0.6, padding: '4px 6px' }}
+          >
+            ✕
+          </button>
+        ),
         { width: 30 },
       )}
     </tr>
   )
 }
 
-function DateInput({ value, onChange, theme: t, late }: { value: string; onChange: (v: string) => void; theme: PCTheme; late?: boolean }) {
+function DateInput({ value, onChange, theme: t, late, disabled }: { value: string; onChange: (v: string) => void; theme: PCTheme; late?: boolean; disabled?: boolean }) {
   return (
     <input
       type="date"
       value={value}
+      disabled={disabled}
       onChange={e => e.target.value && onChange(e.target.value)}
       style={{
         border: `1px solid ${late ? LATE_COLOR : t.border}`, background: t.panel, color: late ? LATE_COLOR : t.text,
         borderRadius: 7, padding: '5px 7px', fontSize: 12, fontWeight: late ? 800 : 600, outline: 'none',
-        fontFamily: "'DM Mono',monospace", colorScheme: t.dark ? 'dark' : 'light',
+        fontFamily: "'DM Mono',monospace", colorScheme: t.dark ? 'dark' : 'light', opacity: disabled ? 0.7 : 1,
       }}
     />
   )

@@ -11,6 +11,7 @@ interface Props {
   scale:    PCScale
   onUpdate: (id: string, patch: Partial<Task>) => void
   onSelect: (id: string) => void
+  readOnly?: boolean
 }
 
 const LABEL_W = 232
@@ -40,7 +41,7 @@ function gRange(tasks: Task[], scale: PCScale): { start: string; end: string } {
   return { start, end }
 }
 
-export default function Gantt({ theme: t, tasks, scale, onUpdate, onSelect }: Props) {
+export default function Gantt({ theme: t, tasks, scale, onUpdate, onSelect, readOnly }: Props) {
   const ppd = ppdFor(scale)
   const [drag, setDrag]     = useState<DragState | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
@@ -265,33 +266,38 @@ export default function Gantt({ theme: t, tasks, scale, onUpdate, onSelect }: Pr
                   <div
                     key={task.id}
                     onMouseDown={ev => {
+                      if (readOnly) return
                       ev.preventDefault(); ev.stopPropagation()
                       setDrag({ id: task.id, mode: 'move', startX: ev.clientX, origStart: task.start, origEnd: task.end })
                     }}
                     onClick={() => onSelect(task.id)}
                     style={{
                       position: 'absolute', left, top: rowY(i) + (ROW - barH) / 2, width: w, height: barH, borderRadius: t.barRad,
-                      background: color, cursor: 'grab', display: 'flex', alignItems: 'center', overflow: 'hidden', zIndex: 4,
+                      background: color, cursor: readOnly ? 'pointer' : 'grab', display: 'flex', alignItems: 'center', overflow: 'hidden', zIndex: 4,
                       opacity: sub ? 0.85 : 1,
                       border: late ? `2px solid ${LATE_COLOR}` : task.isMilestone ? '2px solid rgba(255,255,255,.6)' : 'none',
                       boxShadow: late ? `0 0 0 2px rgba(214,69,69,.25), 0 3px 10px rgba(20,49,94,.35)` : task.isMilestone ? '0 3px 10px rgba(20,49,94,.35)' : '0 2px 6px rgba(20,49,94,.18)',
                     }}
                   >
                     <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${task.progress || 0}%`, background: 'rgba(255,255,255,.28)' }} />
-                    <div
-                      onMouseDown={ev => {
-                        ev.preventDefault(); ev.stopPropagation()
-                        setDrag({ id: task.id, mode: 'l', startX: ev.clientX, origStart: task.start, origEnd: task.end })
-                      }}
-                      style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 8, cursor: 'ew-resize', zIndex: 2 }}
-                    />
-                    <div
-                      onMouseDown={ev => {
-                        ev.preventDefault(); ev.stopPropagation()
-                        setDrag({ id: task.id, mode: 'r', startX: ev.clientX, origStart: task.start, origEnd: task.end })
-                      }}
-                      style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 8, cursor: 'ew-resize', zIndex: 2 }}
-                    />
+                    {!readOnly && (
+                      <div
+                        onMouseDown={ev => {
+                          ev.preventDefault(); ev.stopPropagation()
+                          setDrag({ id: task.id, mode: 'l', startX: ev.clientX, origStart: task.start, origEnd: task.end })
+                        }}
+                        style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 8, cursor: 'ew-resize', zIndex: 2 }}
+                      />
+                    )}
+                    {!readOnly && (
+                      <div
+                        onMouseDown={ev => {
+                          ev.preventDefault(); ev.stopPropagation()
+                          setDrag({ id: task.id, mode: 'r', startX: ev.clientX, origStart: task.start, origEnd: task.end })
+                        }}
+                        style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 8, cursor: 'ew-resize', zIndex: 2 }}
+                      />
+                    )}
                     <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', padding: '0 10px', whiteSpace: 'nowrap', position: 'relative', textShadow: '0 1px 2px rgba(0,0,0,.2)' }}>
                       {w > 60 ? (task.isMilestone ? `◆ ${task.name}` : task.name) : ''}
                     </span>
@@ -307,7 +313,7 @@ export default function Gantt({ theme: t, tasks, scale, onUpdate, onSelect }: Pr
       </div>
 
       <div style={{ padding: '10px 16px', borderTop: `1px solid ${t.border}`, fontSize: 11.5, fontWeight: 600, color: t.sub, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        <span>Drag a bar to reschedule · drag its edges to resize</span>
+        <span>{readOnly ? 'View only — click a bar to inspect it' : 'Drag a bar to reschedule · drag its edges to resize'}</span>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 14 }}>
           {STATUSES.map(s => (
             <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>

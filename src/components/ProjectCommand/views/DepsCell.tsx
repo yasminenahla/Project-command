@@ -9,18 +9,20 @@ interface Props {
   onClose:   () => void
   onToggleDep: (depId: string) => void
   taskName:  (id: string) => string
+  disabled?: boolean
 }
 
-export default function DepsCell({ task, allTasks, theme: t, open, onToggle, onClose, onToggleDep, taskName }: Props) {
+export default function DepsCell({ task, allTasks, theme: t, open, onToggle, onClose, onToggleDep, taskName, disabled }: Props) {
   const depLabel = task.deps.map(taskName).join(', ')
   return (
     <div style={{ position: 'relative' }}>
       <button
         onClick={onToggle}
+        disabled={disabled && !task.deps.length}
         style={{
-          cursor: 'pointer', border: `1px dashed ${t.border}`, background: 'transparent',
+          cursor: disabled && !task.deps.length ? 'default' : 'pointer', border: `1px dashed ${t.border}`, background: 'transparent',
           color: task.deps.length ? t.accent : t.sub, borderRadius: 8, padding: '5px 9px',
-          fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap',
+          fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', opacity: disabled && !task.deps.length ? 0.5 : 1,
         }}
       >
         {task.deps.length ? depLabel.slice(0, 18) + (depLabel.length > 18 ? '…' : '') : '＋ link'}
@@ -39,9 +41,9 @@ export default function DepsCell({ task, allTasks, theme: t, open, onToggle, onC
           {allTasks.filter(x => x.id !== task.id).map(x => (
             <label
               key={x.id}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 6px', borderRadius: 7, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: t.text }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 6px', borderRadius: 7, cursor: disabled ? 'default' : 'pointer', fontSize: 12.5, fontWeight: 600, color: t.text }}
             >
-              <input type="checkbox" checked={task.deps.includes(x.id)} onChange={() => onToggleDep(x.id)} />
+              <input type="checkbox" checked={task.deps.includes(x.id)} disabled={disabled} onChange={() => onToggleDep(x.id)} />
               {x.name}
             </label>
           ))}
