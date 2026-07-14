@@ -7,6 +7,8 @@ import type { SharePayload } from './shareLink'
 const SUPABASE_URL = 'https://qazruufilcmaigisqpps.supabase.co'
 const SUPABASE_KEY = 'sb_publishable_UkJKvY0yOYLcNVZwrwHuGQ_stfwak6M'
 const TABLE_URL = `${SUPABASE_URL}/rest/v1/shares`
+const VERSIONS_URL = `${SUPABASE_URL}/rest/v1/share_versions`
+const MAX_VERSIONS = 30
 
 const HEADERS = {
   apikey: SUPABASE_KEY,
@@ -67,4 +69,54 @@ export async function fetchShareVersion(id: string): Promise<string | null> {
   if (!res.ok) return null
   const rows = await res.json().catch(() => null)
   return Array.isArray(rows) ? rows[0]?.updated_at ?? null : null
+}
+
+export interface VersionEntry {
+  id: number
+  createdAt: string
+  payload: SharePayload
+}
+
+/**
+ * Snapshots a board state into history — best-effort: called after every
+ * successful push (see useProjectCommand), so restoring an earlier version
+ * is always possible even if a later sync clobbers something unexpectedly.
+ * Never throws; a failed snapshot shouldn't break the main sync flow.
+ */
+export async function saveVersion(shareId: string, payload: SharePayload): Promise<void> {
+  try {
+    await safeFetch(VERSIONS_URL, {
+      method: 'POST',
+      headers: { ...HEADERS, Prefer: 'return=minimal' },
+      body: JSON.stringify([{ share_id: shareId, data: payload }]),
+    })
+    await pruneVersions(shareId)
+  } catch { /* history is a safety net, not the primary sync path — ignore failures */ }
+}
+
+/** Keeps only the most recent MAX_VERSIONS snapshots per share so the table doesn't grow unbounded. */
+async function pruneVersions(shareId: string): Promise<void> {
+  const res = await safeFetch(
+    `${VERSIONS_URL}?share_id=eq.${encodeURIComponent(shareId)}&select=id&order=created_at.desc&offset=${MAX_VERSIONS}`,
+    { headers: HEADERS },
+  )
+  if (!res.ok) return
+  const rows = await res.json().catch(() => [])
+  const staleIds = Array.isArray(rows) ? rows.map((r: { id: number }) => r.id) : []
+  if (!staleIds.length) return
+  await safeFetch(`${VERSIONS_URL}?id=in.(${staleIds.join(',')})`, { method: 'DELETE', headers: HEADERS }).catch(() => {})
+}
+
+/** Lists the most recent snapshots for a share, newest first. */
+export async function listVersions(shareId: string, limit = MAX_VERSIONS): Promise<VersionEntry[]> {
+  const res = await safeFetch(
+    `${VERSIONS_URL}?share_id=eq.${encodeURIComponent(shareId)}&select=id,data,created_at&order=created_at.desc&limit=${limit}`,
+    { headers: HEADERS },
+  )
+  if (!res.ok) return []
+  const rows = await res.json().catch(() => [])
+  if (!Array.isArray(rows)) return []
+  return rows
+    .filter(r => Array.isArray(r?.data?.tasks))
+    .map(r => ({ id: r.id, createdAt: r.created_at, payload: r.data as SharePayload }))
 }

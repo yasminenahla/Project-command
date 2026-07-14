@@ -3,6 +3,7 @@ import { THEMES } from './theme'
 import PCHeader from './Header'
 import Toolbar from './Toolbar'
 import PCToast from './PCToast'
+import HistoryPanel from './HistoryPanel'
 import ActionTracker from './views/ActionTracker'
 import Gantt from './views/Gantt'
 import Timeline from './views/Timeline'
@@ -40,7 +41,7 @@ export default function ProjectCommand({ onExit }: Props = {}) {
 
   return (
     <div style={{ minHeight: '100vh', background: t.appBg, color: t.text, fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}>
-      <PCHeader theme={pc.theme} onTheme={pc.setTheme} onImport={handleImport} onExport={handleExport} onShare={pc.share} role={pc.role} onExit={onExit} />
+      <PCHeader theme={pc.theme} onTheme={pc.setTheme} onImport={handleImport} onExport={handleExport} onShare={pc.share} onHistory={pc.openHistory} role={pc.role} onExit={onExit} />
       <Toolbar
         theme={t}
         tab={pc.tab} onTab={pc.setTab}
@@ -100,6 +101,15 @@ export default function ProjectCommand({ onExit }: Props = {}) {
         )}
       </div>
       <PCToast message={pc.toast} theme={t} />
+      <HistoryPanel
+        theme={t}
+        open={pc.historyOpen}
+        loading={pc.loadingVersions}
+        versions={pc.versions}
+        readOnly={readOnly}
+        onRestore={pc.restoreVersion}
+        onClose={pc.closeHistory}
+      />
     </div>
   )
 }

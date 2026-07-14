@@ -4,7 +4,8 @@ import { STATUSES } from '../types'
 import { seedTasks } from '../seed'
 import { addDays, uid } from '../utils/dates'
 import { buildShareUrl, clearShareFromLocation, readLegacySnapshotFromLocation, readShareIdFromLocation, readShareRoleFromLocation } from '../utils/shareLink'
-import { createShare, fetchShare, fetchShareVersion, updateShare } from '../utils/liveShare'
+import { createShare, fetchShare, fetchShareVersion, listVersions, saveVersion, updateShare } from '../utils/liveShare'
+import type { VersionEntry } from '../utils/liveShare'
 import { buildHierarchicalOrder } from '../utils/hierarchy'
 import { mergeTaskLists } from '../utils/merge'
 
@@ -54,6 +55,9 @@ export function useProjectCommand() {
   const [refreshing, setRefreshing] = useState(false)
   const [dirty, setDirty]   = useState(false)   // local edits that haven't synced to the share yet
   const [conflict, setConflict] = useState(false) // another editor pushed a change we haven't pulled yet — our own sync is paused until refresh
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [versions, setVersions] = useState<VersionEntry[]>([])
+  const [loadingVersions, setLoadingVersions] = useState(false)
 
   const toastTimer = useRef<ReturnType<typeof setTimeout>>()
   const dragId      = useRef<string | null>(null)
@@ -131,6 +135,7 @@ export function useProjectCommand() {
           return
         }
         const newVersion = await updateShare(shareId, { tasks, theme })
+        saveVersion(shareId, { tasks, theme }).catch(() => {})
         suppressDirtyRef.current = true
         setPersisted(p => ({ ...p, remoteVersion: newVersion, baseTasks: tasks }))
         setDirty(false)
@@ -273,11 +278,13 @@ export function useProjectCommand() {
       if (!id) {
         const created = await createShare({ tasks, theme })
         id = created.id
+        saveVersion(id, { tasks, theme }).catch(() => {})
         suppressDirtyRef.current = true
         setPersisted(p => ({ ...p, shareId: id, remoteVersion: created.updatedAt, baseTasks: tasks }))
         setDirty(false)
       } else if (role !== 'viewer') {
         const updatedAt = await updateShare(id, { tasks, theme })
+        saveVersion(id, { tasks, theme }).catch(() => {})
         suppressDirtyRef.current = true
         setPersisted(p => ({ ...p, remoteVersion: updatedAt, baseTasks: tasks }))
         setDirty(false)
@@ -337,6 +344,52 @@ export function useProjectCommand() {
     }
   }, [shareId, flash, dirty, role, tasks, baseTasks])
 
+  const openHistory = useCallback(async () => {
+    if (!shareId) {
+      flash('Not shared yet — nothing to show history for')
+      return
+    }
+    setHistoryOpen(true)
+    setLoadingVersions(true)
+    try {
+      const list = await listVersions(shareId)
+      setVersions(list)
+    } catch {
+      flash('Could not load version history')
+    } finally {
+      setLoadingVersions(false)
+    }
+  }, [shareId, flash])
+
+  const closeHistory = useCallback(() => setHistoryOpen(false), [])
+
+  const restoreVersion = useCallback(async (entry: VersionEntry) => {
+    if (!shareId || role === 'viewer') return
+    const ok = window.confirm(
+      `Replace the current board with the version from ${new Date(entry.createdAt).toLocaleString()}? The current board will be saved to history first, so this can always be undone.`,
+    )
+    if (!ok) return
+    try {
+      await saveVersion(shareId, { tasks, theme }) // preserve the current state before overwriting it
+      const newVersion = await updateShare(shareId, entry.payload)
+      await saveVersion(shareId, entry.payload)
+      suppressDirtyRef.current = true
+      setPersisted(p => ({
+        ...p,
+        tasks: entry.payload.tasks,
+        theme: entry.payload.theme ?? p.theme,
+        remoteVersion: newVersion,
+        baseTasks: entry.payload.tasks,
+      }))
+      setDirty(false)
+      setConflict(false)
+      setHistoryOpen(false)
+      flash('Restored an earlier version — your previous board was saved to history too')
+    } catch (err) {
+      flash(`Could not restore: ${err instanceof Error ? err.message : 'unknown error'}`)
+    }
+  }, [shareId, role, tasks, theme, flash])
+
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase()
     if (!query) return tasks
@@ -350,10 +403,11 @@ export function useProjectCommand() {
 
   return {
     tasks, filtered, theme, tab, scale, group, q, depsFor, sel, toast, refreshing, role, dirty, conflict,
-    milestones, hierarchicalFiltered,
+    milestones, hierarchicalFiltered, historyOpen, versions, loadingVersions,
     setTheme, setTab, setScale, setGroup, setQ, setDepsFor, setSel, flash,
     taskName, update, addTask, addMilestone, addSubtask, setMilestone, del, move, startDragReorder, dropReorder,
     cycleStatus, toggleDone, toggleDep, importTasks, setTasks, share, refresh,
+    openHistory, closeHistory, restoreVersion,
   }
 }
 

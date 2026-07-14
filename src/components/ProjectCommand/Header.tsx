@@ -8,13 +8,14 @@ interface Props {
   onImport: (file: File) => void
   onExport: () => void
   onShare:  (role: PCRole) => void
+  onHistory: () => void
   role:     PCRole
   onExit?:  () => void
 }
 
 const THEME_ORDER: PCThemeName[] = ['minimal', 'playful', 'bold']
 
-export default function PCHeader({ theme, onTheme, onImport, onExport, onShare, role, onExit }: Props) {
+export default function PCHeader({ theme, onTheme, onImport, onExport, onShare, onHistory, role, onExit }: Props) {
   const t: PCTheme = THEMES[theme]
   const fileRef = useRef<HTMLInputElement>(null)
   const [shareOpen, setShareOpen] = useState(false)
@@ -163,6 +164,19 @@ export default function PCHeader({ theme, onTheme, onImport, onExport, onShare, 
           }}
         >
           <span style={{ fontSize: 14, lineHeight: 1 }}>⤓</span>Export
+        </button>
+        <button
+          onClick={onHistory}
+          title="View and restore earlier versions of this board"
+          style={{
+            cursor: 'pointer', border: `1px solid ${headerIsLight ? 'rgba(255,255,255,.35)' : t.border}`,
+            background: headerIsLight ? 'rgba(255,255,255,.10)' : '#fff',
+            color: headerIsLight ? t.headText : '#14315E',
+            padding: '8px 14px', borderRadius: 10, fontSize: 12.5, fontWeight: 700,
+            display: 'flex', alignItems: 'center', gap: 7,
+          }}
+        >
+          <span style={{ fontSize: 14, lineHeight: 1 }}>🕐</span>History
         </button>
       </div>
 
