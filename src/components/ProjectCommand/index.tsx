@@ -4,6 +4,7 @@ import PCHeader from './Header'
 import Toolbar from './Toolbar'
 import PCToast from './PCToast'
 import HistoryPanel from './HistoryPanel'
+import OwnerManager from './OwnerManager'
 import ActionTracker from './views/ActionTracker'
 import Gantt from './views/Gantt'
 import Timeline from './views/Timeline'
@@ -90,6 +91,8 @@ export default function ProjectCommand({ onExit }: Props = {}) {
             onSetDepsFor={pc.setDepsFor}
             onSetMilestone={pc.setMilestone}
             onAddSubtask={pc.addSubtask}
+            owners={pc.owners}
+            onManageOwners={pc.openOwnerManager}
             readOnly={readOnly}
           />
         )}
@@ -109,6 +112,16 @@ export default function ProjectCommand({ onExit }: Props = {}) {
         readOnly={readOnly}
         onRestore={pc.restoreVersion}
         onClose={pc.closeHistory}
+      />
+      <OwnerManager
+        theme={t}
+        open={pc.ownerManagerOpen}
+        owners={pc.owners}
+        onAdd={pc.addOwner}
+        onUpdateKeywords={pc.updateOwnerKeywords}
+        onRename={pc.renameOwner}
+        onRemove={pc.removeOwner}
+        onClose={pc.closeOwnerManager}
       />
     </div>
   )

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { PCGroup, PCRole, PCScale, PCTab, PCThemeName, Task, TaskStatus } from '../types'
+import type { OwnerEntry, PCGroup, PCRole, PCScale, PCTab, PCThemeName, Task, TaskStatus } from '../types'
 import { STATUSES } from '../types'
 import { seedTasks } from '../seed'
 import { addDays, uid } from '../utils/dates'
@@ -7,7 +7,8 @@ import { buildShareUrl, clearShareFromLocation, readLegacySnapshotFromLocation, 
 import { createShare, fetchShare, fetchShareVersion, listVersions, saveVersion, updateShare } from '../utils/liveShare'
 import type { VersionEntry } from '../utils/liveShare'
 import { buildHierarchicalOrder } from '../utils/hierarchy'
-import { mergeTaskLists } from '../utils/merge'
+import { mergeOwnerLists, mergeTaskLists } from '../utils/merge'
+import { deriveInitialOwners, suggestOwner } from '../utils/ownerSuggest'
 
 const LS_KEY = 'pc-timeline-v1'
 // If a shared board sits open with no local edits and no sync for this long,
@@ -25,6 +26,8 @@ interface Persisted {
   role:  PCRole     // this browser's access level on the current board — 'viewer' if opened via a view-only link
   remoteVersion?: string  // the shared row's updated_at as of our last successful push/pull — used to detect a concurrent editor's changes before overwriting them
   baseTasks?: Task[]  // the task list as of remoteVersion — the 3-way merge ancestor for reconciling local edits with a newer remote copy
+  owners: OwnerEntry[]  // the team roster — name + keywords that auto-suggest this owner on a matching task
+  baseOwners?: OwnerEntry[]  // the owners list as of remoteVersion — merge ancestor, mirrors baseTasks
 }
 
 function load(): Persisted {
@@ -43,11 +46,16 @@ function load(): Persisted {
           role: s.role ?? 'editor',
           remoteVersion: s.remoteVersion,
           baseTasks: s.baseTasks,
+          // Older saved boards won't have a roster yet — bootstrap one from whatever
+          // owner names are already on the tasks, so the dropdown isn't empty.
+          owners: s.owners ?? deriveInitialOwners(s.tasks.map(t => t.owner)),
+          baseOwners: s.baseOwners,
         }
       }
     }
   } catch { /* fall through to seed */ }
-  return { tasks: seedTasks(), theme: 'playful', tab: 'tracker', scale: 'weeks', group: 'None', role: 'editor' }
+  const tasks = seedTasks()
+  return { tasks, theme: 'playful', tab: 'tracker', scale: 'weeks', group: 'None', role: 'editor', owners: deriveInitialOwners(tasks.map(t => t.owner)) }
 }
 
 export function useProjectCommand() {
@@ -62,6 +70,7 @@ export function useProjectCommand() {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [versions, setVersions] = useState<VersionEntry[]>([])
   const [loadingVersions, setLoadingVersions] = useState(false)
+  const [ownerManagerOpen, setOwnerManagerOpen] = useState(false)
 
   const toastTimer = useRef<ReturnType<typeof setTimeout>>()
   const dragId      = useRef<string | null>(null)
@@ -96,9 +105,10 @@ export function useProjectCommand() {
           const remote = await fetchShare(id)
           if (cancelled) return
           if (remote?.tasks?.length) {
+            const owners = remote.owners ?? deriveInitialOwners(remote.tasks.map(t => t.owner))
             suppressDirtyRef.current = true
             lastActivityRef.current = Date.now()
-            setPersisted(p => ({ ...p, tasks: remote.tasks, theme: remote.theme ?? p.theme, shareId: id, role, remoteVersion: remote.updatedAt, baseTasks: remote.tasks }))
+            setPersisted(p => ({ ...p, tasks: remote.tasks, theme: remote.theme ?? p.theme, shareId: id, role, remoteVersion: remote.updatedAt, baseTasks: remote.tasks, owners, baseOwners: owners }))
             flash(role === 'viewer' ? `Viewing shared board (read-only) · ${remote.tasks.length} tasks` : `Loaded shared board · ${remote.tasks.length} tasks`)
           } else {
             flash('That share link looks empty or invalid')
@@ -120,7 +130,7 @@ export function useProjectCommand() {
     return () => { cancelled = true }
   }, [])
 
-  const { tasks, theme, tab, scale, group, shareId, role, remoteVersion, baseTasks } = persisted
+  const { tasks, theme, tab, scale, group, shareId, role, remoteVersion, baseTasks, owners, baseOwners } = persisted
 
   // Once a board is shared, keep the remote copy fresh as it's edited —
   // debounced so rapid edits collapse into one sync a little after they stop.
@@ -143,11 +153,11 @@ export function useProjectCommand() {
           flash('Another editor made changes — refresh to see them before your edits can sync')
           return
         }
-        const newVersion = await updateShare(shareId, { tasks, theme })
-        saveVersion(shareId, { tasks, theme }).catch(() => {})
+        const newVersion = await updateShare(shareId, { tasks, theme, owners })
+        saveVersion(shareId, { tasks, theme, owners }).catch(() => {})
         suppressDirtyRef.current = true
         lastActivityRef.current = Date.now()
-        setPersisted(p => ({ ...p, remoteVersion: newVersion, baseTasks: tasks }))
+        setPersisted(p => ({ ...p, remoteVersion: newVersion, baseTasks: tasks, baseOwners: owners }))
         setDirty(false)
         setConflict(false)
       } catch {
@@ -155,7 +165,7 @@ export function useProjectCommand() {
       }
     }, 1200)
     return () => clearTimeout(syncTimer.current)
-  }, [shareId, tasks, theme, role, remoteVersion, flash])
+  }, [shareId, tasks, theme, owners, role, remoteVersion, flash])
 
   const setTasks = useCallback((next: Task[]) => {
     setPersisted(p => ({ ...p, tasks: next }))
@@ -169,8 +179,18 @@ export function useProjectCommand() {
   const taskName = useCallback((id: string) => tasks.find(t => t.id === id)?.name ?? '', [tasks])
 
   const update = useCallback((id: string, patch: Partial<Task>) => {
-    setTasks(tasks.map(t => t.id === id ? { ...t, ...patch } : t))
-  }, [tasks, setTasks])
+    setTasks(tasks.map(t => {
+      if (t.id !== id) return t
+      const next = { ...t, ...patch }
+      // Auto-suggest an owner from the roster's keywords, but only ever fill
+      // a blank owner field — never override someone's explicit choice.
+      if (!next.owner && (patch.name !== undefined || patch.notes !== undefined || patch.tags !== undefined)) {
+        const suggested = suggestOwner(`${next.name} ${next.notes} ${(next.tags || []).join(' ')}`, owners)
+        if (suggested) next.owner = suggested
+      }
+      return next
+    }))
+  }, [tasks, setTasks, owners])
 
   const addTask = useCallback((milestoneId?: string) => {
     const last = tasks[tasks.length - 1]
@@ -279,6 +299,35 @@ export function useProjectCommand() {
     flash(`Imported ${imported.length} tasks`)
   }, [setTasks, flash])
 
+  const addOwner = useCallback((name: string, keywords: string[] = []) => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    setPersisted(p => p.owners.some(o => o.name.toLowerCase() === trimmed.toLowerCase())
+      ? p
+      : { ...p, owners: [...p.owners, { name: trimmed, keywords }] })
+  }, [])
+
+  const updateOwnerKeywords = useCallback((name: string, keywords: string[]) => {
+    setPersisted(p => ({ ...p, owners: p.owners.map(o => o.name === name ? { ...o, keywords } : o) }))
+  }, [])
+
+  const renameOwner = useCallback((oldName: string, newName: string) => {
+    const trimmed = newName.trim()
+    if (!trimmed || trimmed === oldName) return
+    setPersisted(p => ({
+      ...p,
+      owners: p.owners.map(o => o.name === oldName ? { ...o, name: trimmed } : o),
+      tasks: p.tasks.map(t => t.owner === oldName ? { ...t, owner: trimmed } : t),
+    }))
+  }, [])
+
+  const removeOwner = useCallback((name: string) => {
+    setPersisted(p => ({ ...p, owners: p.owners.filter(o => o.name !== name) }))
+  }, [])
+
+  const openOwnerManager  = useCallback(() => setOwnerManagerOpen(true), [])
+  const closeOwnerManager = useCallback(() => setOwnerManagerOpen(false), [])
+
   const share = useCallback(async (requestedRole: PCRole = 'editor') => {
     // A viewer can only ever hand out further view-only links — they have no edit
     // access of their own to grant, so any request is downgraded to 'viewer'.
@@ -286,19 +335,19 @@ export function useProjectCommand() {
     try {
       let id = shareId
       if (!id) {
-        const created = await createShare({ tasks, theme })
+        const created = await createShare({ tasks, theme, owners })
         id = created.id
-        saveVersion(id, { tasks, theme }).catch(() => {})
+        saveVersion(id, { tasks, theme, owners }).catch(() => {})
         suppressDirtyRef.current = true
         lastActivityRef.current = Date.now()
-        setPersisted(p => ({ ...p, shareId: id, remoteVersion: created.updatedAt, baseTasks: tasks }))
+        setPersisted(p => ({ ...p, shareId: id, remoteVersion: created.updatedAt, baseTasks: tasks, baseOwners: owners }))
         setDirty(false)
       } else if (role !== 'viewer') {
-        const updatedAt = await updateShare(id, { tasks, theme })
-        saveVersion(id, { tasks, theme }).catch(() => {})
+        const updatedAt = await updateShare(id, { tasks, theme, owners })
+        saveVersion(id, { tasks, theme, owners }).catch(() => {})
         suppressDirtyRef.current = true
         lastActivityRef.current = Date.now()
-        setPersisted(p => ({ ...p, remoteVersion: updatedAt, baseTasks: tasks }))
+        setPersisted(p => ({ ...p, remoteVersion: updatedAt, baseTasks: tasks, baseOwners: owners }))
         setDirty(false)
         setConflict(false)
       }
@@ -313,7 +362,7 @@ export function useProjectCommand() {
       console.error('[ProjectCommand] share failed:', err)
       flash(`Could not create the share link: ${err instanceof Error ? err.message : 'unknown error'}`)
     }
-  }, [tasks, theme, shareId, role, flash])
+  }, [tasks, theme, owners, shareId, role, flash])
 
   const refresh = useCallback(async (auto = false) => {
     if (!shareId) {
@@ -338,16 +387,19 @@ export function useProjectCommand() {
         // `tasks` itself — using `tasks` as its own ancestor would make every
         // field look "unchanged," so the merge would silently take remote's
         // version of everything and erase the local edits it's supposed to protect.
+        const remoteOwners = remote.owners ?? deriveInitialOwners(remote.tasks.map(t => t.owner))
         const merged = mergeTaskLists(baseTasks ?? [], tasks, remote.tasks)
-        const stillPending = JSON.stringify(merged) !== JSON.stringify(remote.tasks)
-        setPersisted(p => ({ ...p, tasks: merged, theme: remote.theme ?? p.theme, remoteVersion: remote.updatedAt, baseTasks: remote.tasks }))
+        const mergedOwners = mergeOwnerLists(baseOwners ?? [], owners, remoteOwners)
+        const stillPending = JSON.stringify(merged) !== JSON.stringify(remote.tasks) || JSON.stringify(mergedOwners) !== JSON.stringify(remoteOwners)
+        setPersisted(p => ({ ...p, tasks: merged, theme: remote.theme ?? p.theme, owners: mergedOwners, remoteVersion: remote.updatedAt, baseTasks: remote.tasks, baseOwners: remoteOwners }))
         if (!stillPending) setDirty(false) // nothing local survived the merge — remote already reflected everything we had
         flash(stillPending
           ? (auto ? 'Auto-refreshed after being idle — your unsynced edits were merged in' : 'Refreshed and merged — your local edits were kept')
           : (auto ? 'Auto-refreshed after being idle' : 'Refreshed — you were already up to date'))
       } else {
+        const remoteOwners = remote.owners ?? deriveInitialOwners(remote.tasks.map(t => t.owner))
         suppressDirtyRef.current = true
-        setPersisted(p => ({ ...p, tasks: remote.tasks, theme: remote.theme ?? p.theme, remoteVersion: remote.updatedAt, baseTasks: remote.tasks }))
+        setPersisted(p => ({ ...p, tasks: remote.tasks, theme: remote.theme ?? p.theme, owners: remoteOwners, remoteVersion: remote.updatedAt, baseTasks: remote.tasks, baseOwners: remoteOwners }))
         setDirty(false)
         flash(auto ? `Auto-refreshed after being idle · ${remote.tasks.length} tasks` : `Refreshed · ${remote.tasks.length} tasks`)
       }
@@ -357,7 +409,7 @@ export function useProjectCommand() {
     } finally {
       setRefreshing(false)
     }
-  }, [shareId, flash, dirty, role, tasks, baseTasks])
+  }, [shareId, flash, dirty, role, tasks, baseTasks, owners, baseOwners])
 
   // Periodically check whether this tab has gone untouched (no edits, no
   // syncs) long enough to risk acting on stale data — if so, auto-refresh it.
@@ -396,17 +448,20 @@ export function useProjectCommand() {
     )
     if (!ok) return
     try {
-      await saveVersion(shareId, { tasks, theme }) // preserve the current state before overwriting it
-      const newVersion = await updateShare(shareId, entry.payload)
-      await saveVersion(shareId, entry.payload)
+      await saveVersion(shareId, { tasks, theme, owners }) // preserve the current state before overwriting it
+      const restoredOwners = entry.payload.owners ?? owners // older versions may pre-date the roster field
+      const newVersion = await updateShare(shareId, { ...entry.payload, owners: restoredOwners })
+      await saveVersion(shareId, { ...entry.payload, owners: restoredOwners })
       suppressDirtyRef.current = true
       lastActivityRef.current = Date.now()
       setPersisted(p => ({
         ...p,
         tasks: entry.payload.tasks,
         theme: entry.payload.theme ?? p.theme,
+        owners: restoredOwners,
         remoteVersion: newVersion,
         baseTasks: entry.payload.tasks,
+        baseOwners: restoredOwners,
       }))
       setDirty(false)
       setConflict(false)
@@ -415,7 +470,7 @@ export function useProjectCommand() {
     } catch (err) {
       flash(`Could not restore: ${err instanceof Error ? err.message : 'unknown error'}`)
     }
-  }, [shareId, role, tasks, theme, flash])
+  }, [shareId, role, tasks, theme, owners, flash])
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase()
@@ -430,11 +485,12 @@ export function useProjectCommand() {
 
   return {
     tasks, filtered, theme, tab, scale, group, q, depsFor, sel, toast, refreshing, role, dirty, conflict,
-    milestones, hierarchicalFiltered, historyOpen, versions, loadingVersions,
+    milestones, hierarchicalFiltered, historyOpen, versions, loadingVersions, owners, ownerManagerOpen,
     setTheme, setTab, setScale, setGroup, setQ, setDepsFor, setSel, flash,
     taskName, update, addTask, addMilestone, addSubtask, setMilestone, del, move, startDragReorder, dropReorder,
     cycleStatus, toggleDone, toggleDep, importTasks, setTasks, share, refresh,
     openHistory, closeHistory, restoreVersion,
+    addOwner, updateOwnerKeywords, renameOwner, removeOwner, openOwnerManager, closeOwnerManager,
   }
 }
 

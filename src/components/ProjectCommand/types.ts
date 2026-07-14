@@ -24,6 +24,11 @@ export type PCScale       = 'days' | 'weeks' | 'months'
 export type PCGroup       = 'None' | 'Status' | 'Owner' | 'Priority' | 'Milestone'
 export type PCRole        = 'editor' | 'viewer'
 
+export interface OwnerEntry {
+  name:     string
+  keywords: string[]  // if a task's name/notes/tags contain one of these, this owner is auto-suggested
+}
+
 export interface PCTheme {
   label:      string
   appBg:      string

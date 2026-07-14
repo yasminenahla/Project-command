@@ -40,7 +40,7 @@ export default function HistoryPanel({ theme: t, open, loading, versions, readOn
             <div style={{ fontSize: 15, fontWeight: 800, color: t.text }}>Version history</div>
             <div style={{ fontSize: 11.5, color: t.sub, marginTop: 2 }}>A snapshot is saved every time the board syncs</div>
           </div>
-          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 18, color: t.sub, lineHeight: 1, padding: 4 }}>✕</button>
+          <button onClick={onClose} title="Close panel" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 18, color: t.sub, lineHeight: 1, padding: 4 }}>✕</button>
         </div>
 
         <div style={{ padding: 14, overflowY: 'auto', flex: 1 }}>

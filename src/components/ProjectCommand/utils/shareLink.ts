@@ -1,8 +1,9 @@
-import type { PCRole, PCThemeName, Task } from '../types'
+import type { OwnerEntry, PCRole, PCThemeName, Task } from '../types'
 
 export interface SharePayload {
   tasks: Task[]
   theme: PCThemeName
+  owners?: OwnerEntry[]  // optional so older share payloads (pre-dating this field) still parse
 }
 
 function fromBase64Url(str: string): string {

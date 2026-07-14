@@ -1,5 +1,5 @@
 import { PRIORITIES, STATUSES } from '../types'
-import type { PCGroup, PCTheme, Task, TaskPriority } from '../types'
+import type { OwnerEntry, PCGroup, PCTheme, Task, TaskPriority } from '../types'
 import { STATUS_COLOR, PRIORITY_COLOR, LATE_COLOR, ownerColor } from '../theme'
 import { diffDays, isTaskLate } from '../utils/dates'
 import { taskIndentLevel } from '../utils/hierarchy'
@@ -26,6 +26,8 @@ interface Props {
   onSetDepsFor:  (id: string | null) => void
   onSetMilestone: (id: string, milestoneId: string | null) => void
   onAddSubtask:   (parentTaskId: string) => void
+  owners:     OwnerEntry[]
+  onManageOwners: () => void
   readOnly?: boolean
 }
 
@@ -34,7 +36,7 @@ const STATUS_C_DONE = STATUS_COLOR.Done
 
 export default function ActionTracker({
   theme: t, tasks, allTasks, milestones, group, sel, depsFor, taskName,
-  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone, onAddSubtask, readOnly,
+  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone, onAddSubtask, owners, onManageOwners, readOnly,
 }: Props) {
   const grouped = group !== 'None'
   const groupByMilestone = group === 'Milestone'
@@ -95,7 +97,23 @@ export default function ActionTracker({
           <tr style={{ borderBottom: `1px solid ${t.border}`, background: t.panel2 }}>
             {COLS.map((c, i) => (
               <th key={i} style={{ textAlign: 'left', fontSize: 11, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase', color: t.sub, padding: '0 12px 10px', whiteSpace: 'nowrap' }}>
-                {c}
+                {c === 'Owner' ? (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    {c}
+                    {!readOnly && (
+                      <button
+                        onClick={onManageOwners}
+                        title="Manage the team roster"
+                        style={{
+                          cursor: 'pointer', border: 'none', background: 'none', color: t.sub, opacity: 0.7,
+                          fontSize: 11, lineHeight: 1, padding: 0, textTransform: 'none', letterSpacing: 0, fontWeight: 700,
+                        }}
+                      >
+                        ⚙
+                      </button>
+                    )}
+                  </span>
+                ) : c}
               </th>
             ))}
           </tr>
@@ -135,6 +153,7 @@ export default function ActionTracker({
                 onSetDepsFor={onSetDepsFor}
                 onSetMilestone={onSetMilestone}
                 onAddSubtask={onAddSubtask}
+                owners={owners}
                 readOnly={readOnly}
               />
             )),
@@ -166,12 +185,13 @@ interface RowProps {
   onSetDepsFor:  (id: string | null) => void
   onSetMilestone: (id: string, milestoneId: string | null) => void
   onAddSubtask:   (parentTaskId: string) => void
+  owners:     OwnerEntry[]
   readOnly?: boolean
 }
 
 function TrackerRow({
   task, theme: t, grouped, indentLevel, selected, depsOpen, allTasks, milestones, taskName,
-  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone, onAddSubtask, readOnly,
+  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone, onAddSubtask, owners, readOnly,
 }: RowProps) {
   const done = task.status === 'Done'
   const late = isTaskLate(task.end, task.status)
@@ -259,7 +279,22 @@ function TrackerRow({
           }}>
             {task.owner ? task.owner[0].toUpperCase() : '?'}
           </span>
-          <InlineInput value={task.owner} onCommit={v => onUpdate(task.id, { owner: v })} theme={t} disabled={readOnly} style={{ width: 88, fontSize: 12.5 }} />
+          <select
+            value={task.owner}
+            onChange={e => onUpdate(task.id, { owner: e.target.value })}
+            disabled={readOnly}
+            style={{
+              border: `1px solid ${t.border}`, background: t.panel, color: t.text, borderRadius: 8,
+              padding: '5px 6px', fontSize: 12.5, fontWeight: 600, cursor: readOnly ? 'default' : 'pointer', outline: 'none',
+              width: 100, opacity: readOnly ? 0.75 : 1,
+            }}
+          >
+            <option value="">— unassigned —</option>
+            {owners.map(o => <option key={o.name} value={o.name}>{o.name}</option>)}
+            {task.owner && !owners.some(o => o.name === task.owner) && (
+              <option value={task.owner}>{task.owner}</option>
+            )}
+          </select>
         </div>,
       )}
 
