@@ -77,8 +77,14 @@ export function buildHierarchicalOrder(list: Task[]): Task[] {
   return out
 }
 
+/** Recursively counts every subtask (at any depth) beneath a task. */
+function countAllSubtasks(taskId: string, subtasksOf: Map<string, Task[]>): number {
+  const kids = subtasksOf.get(taskId) ?? []
+  return kids.reduce((sum, k) => sum + 1 + countAllSubtasks(k.id, subtasksOf), 0)
+}
+
 export type TimelineRow =
-  | { kind: 'milestone'; milestone: Task; children: Task[]; completion: number; start: string }
+  | { kind: 'milestone'; milestone: Task; children: Task[]; subtaskCount: number; completion: number; start: string }
   | { kind: 'rolledTask'; task: Task; children: Task[]; completion: number; start: string }
   | { kind: 'task'; task: Task; start: string }
 
@@ -116,7 +122,8 @@ export function rollupByMilestone(list: Task[]): TimelineRow[] {
       const completion = children.length
         ? Math.round(children.reduce((sum, c) => sum + effectiveProgress(c, subtasksOf), 0) / children.length)
         : m.progress
-      return { kind: 'milestone', milestone: m, children, completion, start: m.start }
+      const subtaskCount = children.reduce((sum, c) => sum + countAllSubtasks(c.id, subtasksOf), 0)
+      return { kind: 'milestone', milestone: m, children, subtaskCount, completion, start: m.start }
     }),
     ...unassigned.map((t): TimelineRow => {
       const kids = subtasksOf.get(t.id) ?? []

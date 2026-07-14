@@ -69,9 +69,10 @@ export default function Timeline({ theme: t, tasks: filtered, onSelect }: Props)
               </div>
               <span style={{ fontSize: 13, fontWeight: 800, color: dotColor, whiteSpace: 'nowrap' }}>{row.completion}%</span>
             </div>
-            {row.children.length > 0 && (
+            {(row.children.length > 0 || row.subtaskCount > 0) && (
               <div style={{ fontSize: 11, fontWeight: 600, color: t.sub, marginTop: 6, textAlign: left ? 'right' : 'left' }}>
                 {row.children.length} task{row.children.length === 1 ? '' : 's'}
+                {row.subtaskCount > 0 && ` · ${row.subtaskCount} subtask${row.subtaskCount === 1 ? '' : 's'}`}
               </div>
             )}
           </div>
