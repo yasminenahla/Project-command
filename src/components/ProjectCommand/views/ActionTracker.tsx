@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { PRIORITIES, STATUSES } from '../types'
 import type { OwnerEntry, PCGroup, PCTheme, Task, TaskPriority } from '../types'
 import { STATUS_COLOR, PRIORITY_COLOR, LATE_COLOR, ownerColor } from '../theme'
@@ -11,6 +12,7 @@ interface Props {
   tasks:      Task[]      // filtered, in display order
   allTasks:   Task[]      // full set, for deps popover
   milestones: Task[]      // tasks marked isMilestone, for the Milestone column's options
+  actionNumbers: Map<string, string>
   group:      PCGroup
   sel:        string | null
   depsFor:    string | null
@@ -26,18 +28,19 @@ interface Props {
   onSetDepsFor:  (id: string | null) => void
   onSetMilestone: (id: string, milestoneId: string | null) => void
   onAddSubtask:   (parentTaskId: string) => void
+  onRenumber:     (id: string, value: string) => void
   owners:     OwnerEntry[]
   onManageOwners: () => void
   rosterDirty?: boolean
   readOnly?: boolean
 }
 
-const COLS = ['', '', 'Task', 'Owner', 'Status', 'Priority', 'Milestone', 'Start', 'Due', 'Progress', 'Deps', 'Notes', '']
+const COLS = ['', '', '#', 'Task', 'Owner', 'Status', 'Priority', 'Milestone', 'Start', 'Due', 'Progress', 'Deps', 'Notes', '']
 const STATUS_C_DONE = STATUS_COLOR.Done
 
 export default function ActionTracker({
-  theme: t, tasks, allTasks, milestones, group, sel, depsFor, taskName,
-  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone, onAddSubtask, owners, onManageOwners, rosterDirty, readOnly,
+  theme: t, tasks, allTasks, milestones, actionNumbers, group, sel, depsFor, taskName,
+  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone, onAddSubtask, onRenumber, owners, onManageOwners, rosterDirty, readOnly,
 }: Props) {
   const grouped = group !== 'None'
   const groupByMilestone = group === 'Milestone'
@@ -126,7 +129,7 @@ export default function ActionTracker({
           {groups.flatMap(([g, list]) => [
             g != null && (
               <tr key={`g${g}`}>
-                <td colSpan={13} style={{ padding: '11px 14px 7px' }}>
+                <td colSpan={14} style={{ padding: '11px 14px 7px' }}>
                   <span style={{ fontSize: 12, fontWeight: 800, color: t.text, letterSpacing: 0.3 }}>{g}</span>
                   <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: t.sub, background: t.chip, padding: '2px 8px', borderRadius: 99 }}>
                     {list.length}
@@ -145,6 +148,7 @@ export default function ActionTracker({
                 depsOpen={depsFor === task.id}
                 allTasks={allTasks}
                 milestones={milestones}
+                actionNumber={actionNumbers.get(task.id) ?? ''}
                 taskName={taskName}
                 onUpdate={onUpdate}
                 onDelete={onDelete}
@@ -157,6 +161,7 @@ export default function ActionTracker({
                 onSetDepsFor={onSetDepsFor}
                 onSetMilestone={onSetMilestone}
                 onAddSubtask={onAddSubtask}
+                onRenumber={onRenumber}
                 owners={owners}
                 readOnly={readOnly}
               />
@@ -177,6 +182,7 @@ interface RowProps {
   depsOpen:   boolean
   allTasks:   Task[]
   milestones: Task[]
+  actionNumber: string
   taskName:   (id: string) => string
   onUpdate:   (id: string, patch: Partial<Task>) => void
   onDelete:   (id: string) => void
@@ -189,19 +195,26 @@ interface RowProps {
   onSetDepsFor:  (id: string | null) => void
   onSetMilestone: (id: string, milestoneId: string | null) => void
   onAddSubtask:   (parentTaskId: string) => void
+  onRenumber:     (id: string, value: string) => void
   owners:     OwnerEntry[]
   readOnly?: boolean
 }
 
 function TrackerRow({
-  task, theme: t, grouped, indentLevel, selected, depsOpen, allTasks, milestones, taskName,
-  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone, onAddSubtask, owners, readOnly,
+  task, theme: t, grouped, indentLevel, selected, depsOpen, allTasks, milestones, actionNumber, taskName,
+  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone, onAddSubtask, onRenumber, owners, readOnly,
 }: RowProps) {
   const done = task.status === 'Done'
   const late = isTaskLate(task.end, task.status)
   const cell = (child: React.ReactNode, style?: React.CSSProperties) => (
     <td style={{ padding: '7px 8px', verticalAlign: 'middle', ...style }}>{child}</td>
   )
+  // Bumped on every renumber attempt (success or failure) so the field
+  // always remounts and shows the authoritative number — otherwise a
+  // rejected edit (e.g. an unresolvable number) would leave the invalid
+  // text sitting in the box, since the InlineInput's own value wouldn't
+  // have actually changed.
+  const [numAttempt, setNumAttempt] = useState(0)
 
   return (
     <tr
@@ -228,6 +241,25 @@ function TrackerRow({
           <span title="Milestone" style={{ color: t.accent, fontSize: 13 }}>◆</span>
         ) : <span style={{ color: t.sub, fontSize: 12 }}>·</span>,
         { width: 26 },
+      )}
+
+      {cell(
+        task.isMilestone ? (
+          <span style={{ fontSize: 12.5, fontWeight: 800, color: t.accent }}>{actionNumber}</span>
+        ) : (
+          <InlineInput
+            key={numAttempt}
+            value={actionNumber}
+            onCommit={v => { onRenumber(task.id, v); setNumAttempt(n => n + 1) }}
+            theme={t}
+            disabled={readOnly}
+            style={{
+              width: 52, fontSize: 12, fontWeight: 700, textAlign: 'center', padding: '5px 4px',
+              color: actionNumber.startsWith('U') ? t.sub : t.text, fontStyle: actionNumber.startsWith('U') ? 'italic' : 'normal',
+            }}
+          />
+        ),
+        { width: 60 },
       )}
 
       {cell(

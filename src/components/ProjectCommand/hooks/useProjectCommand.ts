@@ -6,7 +6,7 @@ import { addDays, uid } from '../utils/dates'
 import { buildShareUrl, clearShareFromLocation, readLegacySnapshotFromLocation, readShareIdFromLocation, readShareRoleFromLocation } from '../utils/shareLink'
 import { createShare, deleteAllVersions, deleteVersion, fetchShare, fetchShareVersion, listVersions, saveVersion, updateShare } from '../utils/liveShare'
 import type { VersionEntry } from '../utils/liveShare'
-import { buildHierarchicalOrder } from '../utils/hierarchy'
+import { buildHierarchicalOrder, computeActionNumbers, retargetTask } from '../utils/hierarchy'
 import { mergeOwnerLists, mergeTaskLists } from '../utils/merge'
 import { dedupeOwners, deriveInitialOwners, suggestOwner } from '../utils/ownerSuggest'
 
@@ -623,13 +623,24 @@ export function useProjectCommand() {
   const milestones = useMemo(() => tasks.filter(t => t.isMilestone), [tasks])
   const hierarchicalFiltered = useMemo(() => buildHierarchicalOrder(filtered), [filtered])
 
+  // Numbers are derived from the full (unfiltered) task set so they stay
+  // stable — and still resolvable via renumberTask — regardless of search.
+  const actionNumbers = useMemo(() => computeActionNumbers(tasks).numbers, [tasks])
+
+  const renumberTask = useCallback((id: string, input: string) => {
+    if (role === 'viewer') return
+    const result = retargetTask(tasks, id, input)
+    if ('error' in result) { flash(result.error); return }
+    setTasks(result.tasks)
+  }, [tasks, role, setTasks, flash])
+
   return {
     tasks, filtered, theme, tab, scale, group, q, depsFor, sel, toast, refreshing, role, dirty, conflict,
     milestones, hierarchicalFiltered, historyOpen, versions, loadingVersions, owners, ownerManagerOpen, rosterDirty,
-    snapshotIntervalMs,
+    snapshotIntervalMs, actionNumbers,
     setTheme, setTab, setScale, setGroup, setQ, setDepsFor, setSel, flash,
     taskName, update, addTask, addMilestone, addSubtask, setMilestone, del, move, startDragReorder, dropReorder,
-    cycleStatus, toggleDone, toggleDep, importTasks, setTasks, share, refresh,
+    cycleStatus, toggleDone, toggleDep, importTasks, setTasks, share, refresh, renumberTask,
     openHistory, closeHistory, restoreVersion, deleteVersionEntry, clearAllHistory, setSnapshotInterval,
     addOwner, updateOwnerKeywords, renameOwner, removeOwner, moveOwner, openOwnerManager, closeOwnerManager, saveRoster,
   }
