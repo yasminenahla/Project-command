@@ -87,13 +87,13 @@ export default function Toolbar({ theme: t, tab, onTab, q, onQ, group, onGroup, 
             onClick={() => onRefresh()}
             disabled={refreshing}
             title={
-              conflict ? 'Another editor made changes — refresh to see them before your edits can sync'
-              : dirty ? 'You have local changes that haven’t synced yet'
+              conflict ? 'Another editor made changes — refresh to merge them in with your local edits'
+              : dirty ? 'You have local changes that haven’t synced yet — refreshing will merge them with the latest version'
               : 'Pull the latest board from the shared link'
             }
             style={{
               position: 'relative', cursor: refreshing ? 'default' : 'pointer',
-              border: `1px solid ${conflict ? '#D64545' : t.border}`, background: t.panel, color: t.text,
+              border: `1px solid ${conflict ? '#F5B301' : t.border}`, background: t.panel, color: t.text,
               padding: '9px 12px', borderRadius: 10, fontSize: 13, fontWeight: 700,
               display: 'flex', alignItems: 'center', gap: 7, boxShadow: t.shadow, opacity: refreshing ? 0.6 : 1,
             }}
@@ -111,7 +111,7 @@ export default function Toolbar({ theme: t, tab, onTab, q, onQ, group, onGroup, 
               <span
                 style={{
                   position: 'absolute', top: -4, right: -4, width: 10, height: 10, borderRadius: 99,
-                  background: conflict ? '#D64545' : '#F5B301', border: `2px solid ${t.panel}`,
+                  background: '#F5B301', border: `2px solid ${t.panel}`,
                 }}
               />
             )}

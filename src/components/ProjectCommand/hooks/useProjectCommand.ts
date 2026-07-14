@@ -6,6 +6,7 @@ import { addDays, uid } from '../utils/dates'
 import { buildShareUrl, clearShareFromLocation, readLegacySnapshotFromLocation, readShareIdFromLocation, readShareRoleFromLocation } from '../utils/shareLink'
 import { createShare, fetchShare, fetchShareVersion, updateShare } from '../utils/liveShare'
 import { buildHierarchicalOrder } from '../utils/hierarchy'
+import { mergeTaskLists } from '../utils/merge'
 
 const LS_KEY = 'pc-timeline-v1'
 
@@ -18,6 +19,7 @@ interface Persisted {
   shareId?: string  // jsonblob id this board auto-syncs to, once shared
   role:  PCRole     // this browser's access level on the current board — 'viewer' if opened via a view-only link
   remoteVersion?: string  // the shared row's updated_at as of our last successful push/pull — used to detect a concurrent editor's changes before overwriting them
+  baseTasks?: Task[]  // the task list as of remoteVersion — the 3-way merge ancestor for reconciling local edits with a newer remote copy
 }
 
 function load(): Persisted {
@@ -35,6 +37,7 @@ function load(): Persisted {
           shareId: s.shareId,
           role: s.role ?? 'editor',
           remoteVersion: s.remoteVersion,
+          baseTasks: s.baseTasks,
         }
       }
     }
@@ -83,7 +86,7 @@ export function useProjectCommand() {
           if (cancelled) return
           if (remote?.tasks?.length) {
             suppressDirtyRef.current = true
-            setPersisted(p => ({ ...p, tasks: remote.tasks, theme: remote.theme ?? p.theme, shareId: id, role, remoteVersion: remote.updatedAt }))
+            setPersisted(p => ({ ...p, tasks: remote.tasks, theme: remote.theme ?? p.theme, shareId: id, role, remoteVersion: remote.updatedAt, baseTasks: remote.tasks }))
             flash(role === 'viewer' ? `Viewing shared board (read-only) · ${remote.tasks.length} tasks` : `Loaded shared board · ${remote.tasks.length} tasks`)
           } else {
             flash('That share link looks empty or invalid')
@@ -105,7 +108,7 @@ export function useProjectCommand() {
     return () => { cancelled = true }
   }, [])
 
-  const { tasks, theme, tab, scale, group, shareId, role, remoteVersion } = persisted
+  const { tasks, theme, tab, scale, group, shareId, role, remoteVersion, baseTasks } = persisted
 
   // Once a board is shared, keep the remote copy fresh as it's edited —
   // debounced so rapid edits collapse into one sync a little after they stop.
@@ -129,7 +132,7 @@ export function useProjectCommand() {
         }
         const newVersion = await updateShare(shareId, { tasks, theme })
         suppressDirtyRef.current = true
-        setPersisted(p => ({ ...p, remoteVersion: newVersion }))
+        setPersisted(p => ({ ...p, remoteVersion: newVersion, baseTasks: tasks }))
         setDirty(false)
         setConflict(false)
       } catch {
@@ -271,12 +274,12 @@ export function useProjectCommand() {
         const created = await createShare({ tasks, theme })
         id = created.id
         suppressDirtyRef.current = true
-        setPersisted(p => ({ ...p, shareId: id, remoteVersion: created.updatedAt }))
+        setPersisted(p => ({ ...p, shareId: id, remoteVersion: created.updatedAt, baseTasks: tasks }))
         setDirty(false)
       } else if (role !== 'viewer') {
         const updatedAt = await updateShare(id, { tasks, theme })
         suppressDirtyRef.current = true
-        setPersisted(p => ({ ...p, remoteVersion: updatedAt }))
+        setPersisted(p => ({ ...p, remoteVersion: updatedAt, baseTasks: tasks }))
         setDirty(false)
         setConflict(false)
       }
@@ -293,28 +296,33 @@ export function useProjectCommand() {
     }
   }, [tasks, theme, shareId, role, flash])
 
-  const refresh = useCallback(async (force = false) => {
+  const refresh = useCallback(async () => {
     if (!shareId) {
       flash('Not shared yet — click Share to sync with collaborators')
       return
     }
-    if (!force && dirty && role !== 'viewer') {
-      const ok = window.confirm(
-        'You have local changes that haven’t synced yet. Refreshing will replace them with the latest shared version, and your unsynced edits will be lost.\n\nRefresh anyway?',
-      )
-      if (!ok) return
-    }
     setRefreshing(true)
     try {
       const remote = await fetchShare(shareId)
-      if (remote?.tasks?.length) {
-        suppressDirtyRef.current = true
-        setPersisted(p => ({ ...p, tasks: remote.tasks, theme: remote.theme ?? p.theme, remoteVersion: remote.updatedAt }))
-        setDirty(false)
-        setConflict(false)
-        flash(`Refreshed · ${remote.tasks.length} tasks`)
-      } else {
+      if (!remote?.tasks?.length) {
         flash('Could not find that shared board anymore')
+        return
+      }
+      setConflict(false)
+      if (dirty && role !== 'viewer') {
+        // Reconcile instead of overwriting: any field you changed since the
+        // last sync wins, everything else picks up the incoming remote value —
+        // so your unsynced edits survive the refresh rather than being wiped.
+        const merged = mergeTaskLists(baseTasks ?? tasks, tasks, remote.tasks)
+        const stillPending = JSON.stringify(merged) !== JSON.stringify(remote.tasks)
+        setPersisted(p => ({ ...p, tasks: merged, theme: remote.theme ?? p.theme, remoteVersion: remote.updatedAt, baseTasks: remote.tasks }))
+        if (!stillPending) setDirty(false) // nothing local survived the merge — remote already reflected everything we had
+        flash(stillPending ? 'Refreshed and merged — your local edits were kept' : 'Refreshed — you were already up to date')
+      } else {
+        suppressDirtyRef.current = true
+        setPersisted(p => ({ ...p, tasks: remote.tasks, theme: remote.theme ?? p.theme, remoteVersion: remote.updatedAt, baseTasks: remote.tasks }))
+        setDirty(false)
+        flash(`Refreshed · ${remote.tasks.length} tasks`)
       }
     } catch (err) {
       console.error('[ProjectCommand] refresh failed:', err)
@@ -322,7 +330,7 @@ export function useProjectCommand() {
     } finally {
       setRefreshing(false)
     }
-  }, [shareId, flash, dirty, role])
+  }, [shareId, flash, dirty, role, tasks, baseTasks])
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase()
