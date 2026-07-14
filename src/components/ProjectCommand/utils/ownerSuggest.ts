@@ -13,6 +13,19 @@ export function deriveInitialOwners(taskOwners: string[]): OwnerEntry[] {
   return out
 }
 
+/** Drops duplicate roster entries (by trimmed, case-insensitive name), keeping the first occurrence. */
+export function dedupeOwners(owners: OwnerEntry[]): OwnerEntry[] {
+  const seen = new Set<string>()
+  const out: OwnerEntry[] = []
+  for (const o of owners) {
+    const key = o.name.trim().toLowerCase()
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    out.push(o)
+  }
+  return out
+}
+
 /** First owner whose keyword appears (case-insensitively) in the given text, or null if none match. */
 export function suggestOwner(text: string, owners: OwnerEntry[]): string | null {
   const haystack = text.toLowerCase()

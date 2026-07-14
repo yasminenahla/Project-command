@@ -8,7 +8,7 @@ import { createShare, fetchShare, fetchShareVersion, listVersions, saveVersion, 
 import type { VersionEntry } from '../utils/liveShare'
 import { buildHierarchicalOrder } from '../utils/hierarchy'
 import { mergeOwnerLists, mergeTaskLists } from '../utils/merge'
-import { deriveInitialOwners, suggestOwner } from '../utils/ownerSuggest'
+import { dedupeOwners, deriveInitialOwners, suggestOwner } from '../utils/ownerSuggest'
 
 const LS_KEY = 'pc-timeline-v1'
 // If a shared board sits open with no local edits and no sync for this long,
@@ -48,7 +48,7 @@ function load(): Persisted {
           baseTasks: s.baseTasks,
           // Older saved boards won't have a roster yet — bootstrap one from whatever
           // owner names are already on the tasks, so the dropdown isn't empty.
-          owners: s.owners ?? deriveInitialOwners(s.tasks.map(t => t.owner)),
+          owners: dedupeOwners(s.owners ?? deriveInitialOwners(s.tasks.map(t => t.owner))),
           baseOwners: s.baseOwners,
         }
       }
@@ -67,6 +67,7 @@ export function useProjectCommand() {
   const [refreshing, setRefreshing] = useState(false)
   const [dirty, setDirty]   = useState(false)   // local edits that haven't synced to the share yet
   const [conflict, setConflict] = useState(false) // another editor pushed a change we haven't pulled yet — our own sync is paused until refresh
+  const [rosterDirty, setRosterDirty] = useState(false) // roster edits not yet committed via the explicit Save button
   const [historyOpen, setHistoryOpen] = useState(false)
   const [versions, setVersions] = useState<VersionEntry[]>([])
   const [loadingVersions, setLoadingVersions] = useState(false)
@@ -105,7 +106,7 @@ export function useProjectCommand() {
           const remote = await fetchShare(id)
           if (cancelled) return
           if (remote?.tasks?.length) {
-            const owners = remote.owners ?? deriveInitialOwners(remote.tasks.map(t => t.owner))
+            const owners = dedupeOwners(remote.owners ?? deriveInitialOwners(remote.tasks.map(t => t.owner)))
             suppressDirtyRef.current = true
             lastActivityRef.current = Date.now()
             setPersisted(p => ({ ...p, tasks: remote.tasks, theme: remote.theme ?? p.theme, shareId: id, role, remoteVersion: remote.updatedAt, baseTasks: remote.tasks, owners, baseOwners: owners }))
@@ -153,11 +154,15 @@ export function useProjectCommand() {
           flash('Another editor made changes — refresh to see them before your edits can sync')
           return
         }
-        const newVersion = await updateShare(shareId, { tasks, theme, owners })
-        saveVersion(shareId, { tasks, theme, owners }).catch(() => {})
+        // Send the last explicitly-saved roster, not whatever's currently sitting
+        // in the roster editor — an ordinary task edit should never publish
+        // unsaved roster changes; only the roster's own Save button does that.
+        const committedOwners = baseOwners ?? owners
+        const newVersion = await updateShare(shareId, { tasks, theme, owners: committedOwners })
+        saveVersion(shareId, { tasks, theme, owners: committedOwners }).catch(() => {})
         suppressDirtyRef.current = true
         lastActivityRef.current = Date.now()
-        setPersisted(p => ({ ...p, remoteVersion: newVersion, baseTasks: tasks, baseOwners: owners }))
+        setPersisted(p => ({ ...p, remoteVersion: newVersion, baseTasks: tasks }))
         setDirty(false)
         setConflict(false)
       } catch {
@@ -165,7 +170,11 @@ export function useProjectCommand() {
       }
     }, 1200)
     return () => clearTimeout(syncTimer.current)
-  }, [shareId, tasks, theme, owners, role, remoteVersion, flash])
+    // `owners` intentionally excluded: this effect syncs task edits, and a
+    // roster-only change must not retrigger it — that's the whole point of
+    // the roster having its own independent Save button.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shareId, tasks, theme, role, remoteVersion, flash])
 
   const setTasks = useCallback((next: Task[]) => {
     setPersisted(p => ({ ...p, tasks: next }))
@@ -305,28 +314,78 @@ export function useProjectCommand() {
     setPersisted(p => p.owners.some(o => o.name.toLowerCase() === trimmed.toLowerCase())
       ? p
       : { ...p, owners: [...p.owners, { name: trimmed, keywords }] })
+    setRosterDirty(true)
   }, [])
 
   const updateOwnerKeywords = useCallback((name: string, keywords: string[]) => {
     setPersisted(p => ({ ...p, owners: p.owners.map(o => o.name === name ? { ...o, keywords } : o) }))
+    setRosterDirty(true)
   }, [])
 
   const renameOwner = useCallback((oldName: string, newName: string) => {
     const trimmed = newName.trim()
     if (!trimmed || trimmed === oldName) return
-    setPersisted(p => ({
-      ...p,
-      owners: p.owners.map(o => o.name === oldName ? { ...o, name: trimmed } : o),
-      tasks: p.tasks.map(t => t.owner === oldName ? { ...t, owner: trimmed } : t),
-    }))
+    setPersisted(p => p.owners.some(o => o.name.toLowerCase() === trimmed.toLowerCase() && o.name !== oldName)
+      ? p // someone with that name already exists — don't create a duplicate
+      : {
+        ...p,
+        owners: p.owners.map(o => o.name === oldName ? { ...o, name: trimmed } : o),
+        tasks: p.tasks.map(t => t.owner === oldName ? { ...t, owner: trimmed } : t),
+      })
+    setRosterDirty(true)
   }, [])
 
   const removeOwner = useCallback((name: string) => {
     setPersisted(p => ({ ...p, owners: p.owners.filter(o => o.name !== name) }))
+    setRosterDirty(true)
+  }, [])
+
+  const moveOwner = useCallback((name: string, dir: 1 | -1) => {
+    setPersisted(p => {
+      const a = p.owners.slice()
+      const i = a.findIndex(o => o.name === name)
+      const j = i + dir
+      if (i === -1 || j < 0 || j >= a.length) return p
+      ;[a[i], a[j]] = [a[j], a[i]]
+      return { ...p, owners: a }
+    })
+    setRosterDirty(true)
   }, [])
 
   const openOwnerManager  = useCallback(() => setOwnerManagerOpen(true), [])
   const closeOwnerManager = useCallback(() => setOwnerManagerOpen(false), [])
+
+  const saveRoster = useCallback(async () => {
+    if (role === 'viewer') return
+    if (!shareId) {
+      // Nothing to sync to yet — local edits are already saved to this browser.
+      setRosterDirty(false)
+      flash('Not shared yet — your roster is saved locally')
+      return
+    }
+    try {
+      // Roster saves push the current tasks too (one payload per share row) —
+      // guard against overwriting someone else's concurrent task edit the same
+      // way the ordinary auto-sync does.
+      const currentVersion = await fetchShareVersion(shareId).catch(() => null)
+      if (currentVersion && remoteVersion && currentVersion !== remoteVersion) {
+        flash('Another editor made changes — refresh first, then save the roster again')
+        return
+      }
+      const deduped = dedupeOwners(owners)
+      const newVersion = await updateShare(shareId, { tasks, theme, owners: deduped })
+      saveVersion(shareId, { tasks, theme, owners: deduped }).catch(() => {})
+      suppressDirtyRef.current = true
+      lastActivityRef.current = Date.now()
+      setPersisted(p => ({ ...p, owners: deduped, remoteVersion: newVersion, baseTasks: tasks, baseOwners: deduped }))
+      setRosterDirty(false)
+      setDirty(false)
+      setConflict(false)
+      flash('Roster saved')
+    } catch (err) {
+      flash(`Could not save the roster: ${err instanceof Error ? err.message : 'unknown error'}`)
+    }
+  }, [shareId, role, remoteVersion, owners, tasks, theme, flash])
 
   const share = useCallback(async (requestedRole: PCRole = 'editor') => {
     // A viewer can only ever hand out further view-only links — they have no edit
@@ -342,6 +401,7 @@ export function useProjectCommand() {
         lastActivityRef.current = Date.now()
         setPersisted(p => ({ ...p, shareId: id, remoteVersion: created.updatedAt, baseTasks: tasks, baseOwners: owners }))
         setDirty(false)
+        setRosterDirty(false)
       } else if (role !== 'viewer') {
         const updatedAt = await updateShare(id, { tasks, theme, owners })
         saveVersion(id, { tasks, theme, owners }).catch(() => {})
@@ -349,6 +409,7 @@ export function useProjectCommand() {
         lastActivityRef.current = Date.now()
         setPersisted(p => ({ ...p, remoteVersion: updatedAt, baseTasks: tasks, baseOwners: owners }))
         setDirty(false)
+        setRosterDirty(false)
         setConflict(false)
       }
       const url = buildShareUrl(id, linkRole)
@@ -378,38 +439,53 @@ export function useProjectCommand() {
       }
       setConflict(false)
       lastActivityRef.current = Date.now()
+      const remoteOwners = dedupeOwners(remote.owners ?? deriveInitialOwners(remote.tasks.map(t => t.owner)))
+
+      // Tasks and the roster are reconciled independently — editing a task
+      // shouldn't block a plain roster pull, and vice versa. Only a side with
+      // its own local pending changes goes through the merge; the other side
+      // just takes whatever's currently saved on the shared board.
+      let nextTasks = remote.tasks
+      let taskStillPending = false
       if (dirty && role !== 'viewer') {
-        // Reconcile instead of overwriting: any field you changed since the
-        // last sync wins, everything else picks up the incoming remote value —
-        // so your unsynced edits survive the refresh rather than being wiped.
-        // If we never captured a merge ancestor (e.g. this board was saved by an
-        // older version of the app), fall back to an empty base rather than
+        // If we never captured a merge ancestor (e.g. this board was saved by
+        // an older version of the app), fall back to an empty base rather than
         // `tasks` itself — using `tasks` as its own ancestor would make every
         // field look "unchanged," so the merge would silently take remote's
         // version of everything and erase the local edits it's supposed to protect.
-        const remoteOwners = remote.owners ?? deriveInitialOwners(remote.tasks.map(t => t.owner))
-        const merged = mergeTaskLists(baseTasks ?? [], tasks, remote.tasks)
-        const mergedOwners = mergeOwnerLists(baseOwners ?? [], owners, remoteOwners)
-        const stillPending = JSON.stringify(merged) !== JSON.stringify(remote.tasks) || JSON.stringify(mergedOwners) !== JSON.stringify(remoteOwners)
-        setPersisted(p => ({ ...p, tasks: merged, theme: remote.theme ?? p.theme, owners: mergedOwners, remoteVersion: remote.updatedAt, baseTasks: remote.tasks, baseOwners: remoteOwners }))
-        if (!stillPending) setDirty(false) // nothing local survived the merge — remote already reflected everything we had
-        flash(stillPending
-          ? (auto ? 'Auto-refreshed after being idle — your unsynced edits were merged in' : 'Refreshed and merged — your local edits were kept')
-          : (auto ? 'Auto-refreshed after being idle' : 'Refreshed — you were already up to date'))
-      } else {
-        const remoteOwners = remote.owners ?? deriveInitialOwners(remote.tasks.map(t => t.owner))
-        suppressDirtyRef.current = true
-        setPersisted(p => ({ ...p, tasks: remote.tasks, theme: remote.theme ?? p.theme, owners: remoteOwners, remoteVersion: remote.updatedAt, baseTasks: remote.tasks, baseOwners: remoteOwners }))
-        setDirty(false)
-        flash(auto ? `Auto-refreshed after being idle · ${remote.tasks.length} tasks` : `Refreshed · ${remote.tasks.length} tasks`)
+        nextTasks = mergeTaskLists(baseTasks ?? [], tasks, remote.tasks)
+        taskStillPending = JSON.stringify(nextTasks) !== JSON.stringify(remote.tasks)
       }
+
+      let nextOwners = remoteOwners
+      let ownersStillPending = false
+      if (rosterDirty && role !== 'viewer') {
+        nextOwners = mergeOwnerLists(baseOwners ?? [], owners, remoteOwners)
+        ownersStillPending = JSON.stringify(nextOwners) !== JSON.stringify(remoteOwners)
+      }
+
+      // Only `taskStillPending` matters here: the task auto-sync effect watches
+      // `tasks`/`theme`/`remoteVersion`, so it's what decides whether this
+      // setPersisted should be treated as "already handled" (suppressed) or as
+      // a fresh local task change to sync. Whether the *roster* still has
+      // pending changes is irrelevant to that effect — leaving this dependent
+      // on `ownersStillPending` too previously let an unrelated roster edit
+      // leave the effect unsuppressed, which scheduled a spurious task push
+      // that could then overwrite a roster Save with a stale owners snapshot.
+      if (!taskStillPending) suppressDirtyRef.current = true
+      setPersisted(p => ({ ...p, tasks: nextTasks, theme: remote.theme ?? p.theme, owners: nextOwners, remoteVersion: remote.updatedAt, baseTasks: remote.tasks, baseOwners: remoteOwners }))
+      if (!taskStillPending) setDirty(false)
+      if (!ownersStillPending) setRosterDirty(false)
+      flash(taskStillPending
+        ? (auto ? 'Auto-refreshed after being idle — your unsynced edits were merged in' : 'Refreshed and merged — your local edits were kept')
+        : (auto ? `Auto-refreshed after being idle · ${remote.tasks.length} tasks` : `Refreshed · ${remote.tasks.length} tasks`))
     } catch (err) {
       console.error('[ProjectCommand] refresh failed:', err)
       if (!auto) flash(`Could not refresh: ${err instanceof Error ? err.message : 'unknown error'}`)
     } finally {
       setRefreshing(false)
     }
-  }, [shareId, flash, dirty, role, tasks, baseTasks, owners, baseOwners])
+  }, [shareId, flash, dirty, rosterDirty, role, tasks, baseTasks, owners, baseOwners])
 
   // Periodically check whether this tab has gone untouched (no edits, no
   // syncs) long enough to risk acting on stale data — if so, auto-refresh it.
@@ -449,7 +525,7 @@ export function useProjectCommand() {
     if (!ok) return
     try {
       await saveVersion(shareId, { tasks, theme, owners }) // preserve the current state before overwriting it
-      const restoredOwners = entry.payload.owners ?? owners // older versions may pre-date the roster field
+      const restoredOwners = dedupeOwners(entry.payload.owners ?? owners) // older versions may pre-date the roster field
       const newVersion = await updateShare(shareId, { ...entry.payload, owners: restoredOwners })
       await saveVersion(shareId, { ...entry.payload, owners: restoredOwners })
       suppressDirtyRef.current = true
@@ -464,6 +540,7 @@ export function useProjectCommand() {
         baseOwners: restoredOwners,
       }))
       setDirty(false)
+      setRosterDirty(false)
       setConflict(false)
       setHistoryOpen(false)
       flash('Restored an earlier version — your previous board was saved to history too')
@@ -485,12 +562,12 @@ export function useProjectCommand() {
 
   return {
     tasks, filtered, theme, tab, scale, group, q, depsFor, sel, toast, refreshing, role, dirty, conflict,
-    milestones, hierarchicalFiltered, historyOpen, versions, loadingVersions, owners, ownerManagerOpen,
+    milestones, hierarchicalFiltered, historyOpen, versions, loadingVersions, owners, ownerManagerOpen, rosterDirty,
     setTheme, setTab, setScale, setGroup, setQ, setDepsFor, setSel, flash,
     taskName, update, addTask, addMilestone, addSubtask, setMilestone, del, move, startDragReorder, dropReorder,
     cycleStatus, toggleDone, toggleDep, importTasks, setTasks, share, refresh,
     openHistory, closeHistory, restoreVersion,
-    addOwner, updateOwnerKeywords, renameOwner, removeOwner, openOwnerManager, closeOwnerManager,
+    addOwner, updateOwnerKeywords, renameOwner, removeOwner, moveOwner, openOwnerManager, closeOwnerManager, saveRoster,
   }
 }
 

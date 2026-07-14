@@ -69,5 +69,7 @@ export function mergeTaskLists(base: Task[], local: Task[], remote: Task[]): Tas
 }
 
 export function mergeOwnerLists(base: OwnerEntry[], local: OwnerEntry[], remote: OwnerEntry[]): OwnerEntry[] {
-  return mergeByKey(base, local, remote, o => o.name)
+  // Keyed by a normalized (trimmed, lowercased) name so "Sam" and "sam " are
+  // recognized as the same person instead of producing a duplicate entry.
+  return mergeByKey(base, local, remote, o => o.name.trim().toLowerCase())
 }

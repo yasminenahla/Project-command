@@ -5,10 +5,13 @@ interface Props {
   theme:   PCTheme
   open:    boolean
   owners:  OwnerEntry[]
+  dirty:   boolean
   onAdd:    (name: string, keywords: string[]) => void
   onUpdateKeywords: (name: string, keywords: string[]) => void
   onRename: (oldName: string, newName: string) => void
   onRemove: (name: string) => void
+  onMove:   (name: string, dir: 1 | -1) => void
+  onSave:   () => void
   onClose:  () => void
 }
 
@@ -16,7 +19,7 @@ function parseKeywords(v: string): string[] {
   return v.split(',').map(s => s.trim()).filter(Boolean)
 }
 
-export default function OwnerManager({ theme: t, open, owners, onAdd, onUpdateKeywords, onRename, onRemove, onClose }: Props) {
+export default function OwnerManager({ theme: t, open, owners, dirty, onAdd, onUpdateKeywords, onRename, onRemove, onMove, onSave, onClose }: Props) {
   const [newName, setNewName] = useState('')
   const [newKeywords, setNewKeywords] = useState('')
 
@@ -45,15 +48,55 @@ export default function OwnerManager({ theme: t, open, owners, onAdd, onUpdateKe
           <button onClick={onClose} title="Close panel" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 18, color: t.sub, lineHeight: 1, padding: 4 }}>✕</button>
         </div>
 
+        <div style={{
+          padding: '10px 18px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between', gap: 10, background: dirty ? 'rgba(245,179,1,.14)' : 'transparent',
+        }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: dirty ? t.text : t.sub, display: 'flex', alignItems: 'center', gap: 6 }}>
+            {dirty && <span style={{ width: 7, height: 7, borderRadius: 99, background: '#F5B301', flexShrink: 0 }} />}
+            {dirty ? 'Unsaved changes' : 'All changes saved'}
+          </span>
+          <button
+            onClick={onSave}
+            disabled={!dirty}
+            title="Save the roster to the shared board — Refresh only ever pulls the last saved roster"
+            style={{
+              cursor: dirty ? 'pointer' : 'default', border: 'none', background: dirty ? t.accent : t.chip,
+              color: dirty ? '#fff' : t.sub, padding: '7px 14px', borderRadius: 8, fontSize: 12.5, fontWeight: 700,
+              opacity: dirty ? 1 : 0.7,
+            }}
+          >
+            Save roster
+          </button>
+        </div>
+
         <div style={{ padding: 14, overflowY: 'auto', flex: 1 }}>
           {owners.length === 0 && (
             <div style={{ color: t.sub, fontSize: 13, padding: '8px 4px', lineHeight: 1.5 }}>
               No one on the roster yet — add a name below.
             </div>
           )}
-          {owners.map(o => (
+          {owners.map((o, i) => (
             <div key={o.name} style={{ padding: '11px 13px', borderRadius: 10, border: `1px solid ${t.border}`, marginBottom: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+                  <button
+                    onClick={() => onMove(o.name, -1)}
+                    disabled={i === 0}
+                    title="Move up"
+                    style={{ border: 'none', background: 'none', cursor: i === 0 ? 'default' : 'pointer', color: t.sub, fontSize: 9, lineHeight: 0.9, padding: 0, opacity: i === 0 ? 0.3 : 1 }}
+                  >
+                    ▲
+                  </button>
+                  <button
+                    onClick={() => onMove(o.name, 1)}
+                    disabled={i === owners.length - 1}
+                    title="Move down"
+                    style={{ border: 'none', background: 'none', cursor: i === owners.length - 1 ? 'default' : 'pointer', color: t.sub, fontSize: 9, lineHeight: 0.9, padding: 0, opacity: i === owners.length - 1 ? 0.3 : 1 }}
+                  >
+                    ▼
+                  </button>
+                </div>
                 <input
                   defaultValue={o.name}
                   key={o.name}

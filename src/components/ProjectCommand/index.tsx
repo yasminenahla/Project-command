@@ -93,6 +93,7 @@ export default function ProjectCommand({ onExit }: Props = {}) {
             onAddSubtask={pc.addSubtask}
             owners={pc.owners}
             onManageOwners={pc.openOwnerManager}
+            rosterDirty={pc.rosterDirty}
             readOnly={readOnly}
           />
         )}
@@ -117,10 +118,13 @@ export default function ProjectCommand({ onExit }: Props = {}) {
         theme={t}
         open={pc.ownerManagerOpen}
         owners={pc.owners}
+        dirty={pc.rosterDirty}
         onAdd={pc.addOwner}
         onUpdateKeywords={pc.updateOwnerKeywords}
         onRename={pc.renameOwner}
         onRemove={pc.removeOwner}
+        onMove={pc.moveOwner}
+        onSave={pc.saveRoster}
         onClose={pc.closeOwnerManager}
       />
     </div>

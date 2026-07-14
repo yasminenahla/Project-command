@@ -28,6 +28,7 @@ interface Props {
   onAddSubtask:   (parentTaskId: string) => void
   owners:     OwnerEntry[]
   onManageOwners: () => void
+  rosterDirty?: boolean
   readOnly?: boolean
 }
 
@@ -36,7 +37,7 @@ const STATUS_C_DONE = STATUS_COLOR.Done
 
 export default function ActionTracker({
   theme: t, tasks, allTasks, milestones, group, sel, depsFor, taskName,
-  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone, onAddSubtask, owners, onManageOwners, readOnly,
+  onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone, onAddSubtask, owners, onManageOwners, rosterDirty, readOnly,
 }: Props) {
   const grouped = group !== 'None'
   const groupByMilestone = group === 'Milestone'
@@ -103,13 +104,16 @@ export default function ActionTracker({
                     {!readOnly && (
                       <button
                         onClick={onManageOwners}
-                        title="Manage the team roster"
+                        title={rosterDirty ? 'Manage the team roster — unsaved changes' : 'Manage the team roster'}
                         style={{
-                          cursor: 'pointer', border: 'none', background: 'none', color: t.sub, opacity: 0.7,
+                          position: 'relative', cursor: 'pointer', border: 'none', background: 'none', color: t.sub, opacity: 0.7,
                           fontSize: 11, lineHeight: 1, padding: 0, textTransform: 'none', letterSpacing: 0, fontWeight: 700,
                         }}
                       >
                         ⚙
+                        {rosterDirty && (
+                          <span style={{ position: 'absolute', top: -3, right: -5, width: 6, height: 6, borderRadius: 99, background: '#F5B301' }} />
+                        )}
                       </button>
                     )}
                   </span>
