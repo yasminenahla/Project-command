@@ -4,7 +4,7 @@ import { STATUSES } from '../types'
 import { seedTasks } from '../seed'
 import { addDays, uid } from '../utils/dates'
 import { buildShareUrl, clearShareFromLocation, readLegacySnapshotFromLocation, readShareIdFromLocation, readShareRoleFromLocation } from '../utils/shareLink'
-import { createShare, fetchShare, fetchShareVersion, listVersions, saveVersion, updateShare } from '../utils/liveShare'
+import { createShare, deleteAllVersions, deleteVersion, fetchShare, fetchShareVersion, listVersions, saveVersion, updateShare } from '../utils/liveShare'
 import type { VersionEntry } from '../utils/liveShare'
 import { buildHierarchicalOrder } from '../utils/hierarchy'
 import { mergeOwnerLists, mergeTaskLists } from '../utils/merge'
@@ -15,6 +15,15 @@ const LS_KEY = 'pc-timeline-v1'
 // auto-refresh it — otherwise a long-idle tab can act on a very stale view
 // once someone resumes editing, causing avoidable conflicts.
 const IDLE_REFRESH_MS = 25 * 60 * 1000
+
+// How often routine edits get snapshotted into version history — a per-browser
+// preference (not synced) since it only throttles noise, not correctness.
+// 0 means "every sync." Explicit actions (Share, Save roster, Restore) always
+// snapshot regardless of this setting.
+const SNAPSHOT_INTERVAL_KEY = 'pc-snapshot-interval-ms'
+function loadSnapshotIntervalMs(): number {
+  try { return Number(localStorage.getItem(SNAPSHOT_INTERVAL_KEY)) || 0 } catch { return 0 }
+}
 
 interface Persisted {
   tasks: Task[]
@@ -86,6 +95,9 @@ export function useProjectCommand() {
   const [versions, setVersions] = useState<VersionEntry[]>([])
   const [loadingVersions, setLoadingVersions] = useState(false)
   const [ownerManagerOpen, setOwnerManagerOpen] = useState(false)
+  const [snapshotIntervalMs, setSnapshotIntervalMsState] = useState(loadSnapshotIntervalMs)
+  const snapshotIntervalRef = useRef(snapshotIntervalMs)
+  snapshotIntervalRef.current = snapshotIntervalMs
 
   const toastTimer = useRef<ReturnType<typeof setTimeout>>()
   const dragId      = useRef<string | null>(null)
@@ -96,6 +108,8 @@ export function useProjectCommand() {
   // Bumped on every local edit and every successful push/pull — the idle-refresh
   // timer below fires only once this has gone untouched for IDLE_REFRESH_MS.
   const lastActivityRef = useRef(Date.now())
+  // Tracks the last routine (non-explicit) snapshot so it can be throttled by snapshotIntervalMs.
+  const lastSnapshotAtRef = useRef(0)
 
   useEffect(() => {
     try { localStorage.setItem(LS_KEY, JSON.stringify(persisted)) } catch { /* ignore quota errors */ }
@@ -173,7 +187,10 @@ export function useProjectCommand() {
         // unsaved roster changes; only the roster's own Save button does that.
         const committedOwners = baseOwners ?? owners
         const newVersion = await updateShare(shareId, { tasks, theme, owners: committedOwners })
-        saveVersion(shareId, { tasks, theme, owners: committedOwners }).catch(() => {})
+        if (snapshotIntervalRef.current === 0 || Date.now() - lastSnapshotAtRef.current >= snapshotIntervalRef.current) {
+          saveVersion(shareId, { tasks, theme, owners: committedOwners }).catch(() => {})
+          lastSnapshotAtRef.current = Date.now()
+        }
         suppressDirtyRef.current = true
         lastActivityRef.current = Date.now()
         setPersisted(p => ({ ...p, remoteVersion: newVersion, baseTasks: tasks }))
@@ -535,6 +552,34 @@ export function useProjectCommand() {
 
   const closeHistory = useCallback(() => setHistoryOpen(false), [])
 
+  const setSnapshotInterval = useCallback((ms: number) => {
+    setSnapshotIntervalMsState(ms)
+    try { localStorage.setItem(SNAPSHOT_INTERVAL_KEY, String(ms)) } catch { /* ignore quota errors */ }
+  }, [])
+
+  const deleteVersionEntry = useCallback(async (id: number) => {
+    if (role === 'viewer') return
+    try {
+      await deleteVersion(id)
+      setVersions(v => v.filter(x => x.id !== id))
+    } catch (err) {
+      flash(`Could not delete that version: ${err instanceof Error ? err.message : 'unknown error'}`)
+    }
+  }, [role, flash])
+
+  const clearAllHistory = useCallback(async () => {
+    if (!shareId || role === 'viewer') return
+    const ok = window.confirm('Delete all saved history for this board? This cannot be undone.')
+    if (!ok) return
+    try {
+      await deleteAllVersions(shareId)
+      setVersions([])
+      flash('History cleared')
+    } catch (err) {
+      flash(`Could not clear history: ${err instanceof Error ? err.message : 'unknown error'}`)
+    }
+  }, [shareId, role, flash])
+
   const restoreVersion = useCallback(async (entry: VersionEntry) => {
     if (!shareId || role === 'viewer') return
     const ok = window.confirm(
@@ -581,10 +626,11 @@ export function useProjectCommand() {
   return {
     tasks, filtered, theme, tab, scale, group, q, depsFor, sel, toast, refreshing, role, dirty, conflict,
     milestones, hierarchicalFiltered, historyOpen, versions, loadingVersions, owners, ownerManagerOpen, rosterDirty,
+    snapshotIntervalMs,
     setTheme, setTab, setScale, setGroup, setQ, setDepsFor, setSel, flash,
     taskName, update, addTask, addMilestone, addSubtask, setMilestone, del, move, startDragReorder, dropReorder,
     cycleStatus, toggleDone, toggleDep, importTasks, setTasks, share, refresh,
-    openHistory, closeHistory, restoreVersion,
+    openHistory, closeHistory, restoreVersion, deleteVersionEntry, clearAllHistory, setSnapshotInterval,
     addOwner, updateOwnerKeywords, renameOwner, removeOwner, moveOwner, openOwnerManager, closeOwnerManager, saveRoster,
   }
 }

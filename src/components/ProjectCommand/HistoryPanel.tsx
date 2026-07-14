@@ -7,9 +7,21 @@ interface Props {
   loading: boolean
   versions: VersionEntry[]
   readOnly?: boolean
+  snapshotIntervalMs: number
   onRestore: (entry: VersionEntry) => void
+  onDelete:  (id: number) => void
+  onClearAll: () => void
+  onSetSnapshotInterval: (ms: number) => void
   onClose:  () => void
 }
+
+const FREQUENCY_OPTIONS: { label: string; ms: number }[] = [
+  { label: 'Every save', ms: 0 },
+  { label: 'Every 5 minutes', ms: 5 * 60_000 },
+  { label: 'Every 15 minutes', ms: 15 * 60_000 },
+  { label: 'Every 30 minutes', ms: 30 * 60_000 },
+  { label: 'Every hour', ms: 60 * 60_000 },
+]
 
 function relativeTime(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime()
@@ -22,7 +34,10 @@ function relativeTime(iso: string): string {
   return `${days} day${days === 1 ? '' : 's'} ago`
 }
 
-export default function HistoryPanel({ theme: t, open, loading, versions, readOnly, onRestore, onClose }: Props) {
+export default function HistoryPanel({
+  theme: t, open, loading, versions, readOnly, snapshotIntervalMs,
+  onRestore, onDelete, onClearAll, onSetSnapshotInterval, onClose,
+}: Props) {
   if (!open) return null
 
   return (
@@ -30,7 +45,7 @@ export default function HistoryPanel({ theme: t, open, loading, versions, readOn
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(10,20,35,.4)', zIndex: 100 }} />
       <div
         style={{
-          position: 'fixed', top: 0, right: 0, bottom: 0, width: 360, maxWidth: '90vw',
+          position: 'fixed', top: 0, right: 0, bottom: 0, width: 380, maxWidth: '90vw',
           background: t.panel, borderLeft: `1px solid ${t.border}`, zIndex: 101,
           boxShadow: '-14px 0 34px rgba(20,49,94,.25)', display: 'flex', flexDirection: 'column',
         }}
@@ -42,6 +57,23 @@ export default function HistoryPanel({ theme: t, open, loading, versions, readOn
           </div>
           <button onClick={onClose} title="Close panel" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 18, color: t.sub, lineHeight: 1, padding: 4 }}>✕</button>
         </div>
+
+        {!readOnly && (
+          <div style={{ padding: '12px 18px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <label style={{ fontSize: 12, color: t.sub, display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+              <span style={{ whiteSpace: 'nowrap' }}>Snapshot frequency</span>
+              <select
+                value={snapshotIntervalMs}
+                onChange={e => onSetSnapshotInterval(Number(e.target.value))}
+                style={{ flex: 1, minWidth: 0, padding: '5px 7px', borderRadius: 7, border: `1px solid ${t.border}`, background: t.panel2, color: t.text, fontSize: 12 }}
+              >
+                {FREQUENCY_OPTIONS.map(o => (
+                  <option key={o.ms} value={o.ms}>{o.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
 
         <div style={{ padding: 14, overflowY: 'auto', flex: 1 }}>
           {loading && <div style={{ color: t.sub, fontSize: 13, padding: '8px 4px' }}>Loading…</div>}
@@ -67,17 +99,39 @@ export default function HistoryPanel({ theme: t, open, loading, versions, readOn
                   {new Date(v.createdAt).toLocaleString()} · {v.payload.tasks.length} tasks
                 </div>
               </div>
-              {!readOnly && i !== 0 && (
-                <button
-                  onClick={() => onRestore(v)}
-                  style={{ flexShrink: 0, cursor: 'pointer', border: 'none', background: t.accent, color: '#fff', padding: '6px 13px', borderRadius: 8, fontSize: 12, fontWeight: 700 }}
-                >
-                  Restore
-                </button>
+              {!readOnly && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  {i !== 0 && (
+                    <button
+                      onClick={() => onRestore(v)}
+                      style={{ cursor: 'pointer', border: 'none', background: t.accent, color: '#fff', padding: '6px 13px', borderRadius: 8, fontSize: 12, fontWeight: 700 }}
+                    >
+                      Restore
+                    </button>
+                  )}
+                  <button
+                    onClick={() => onDelete(v.id)}
+                    title="Delete this snapshot"
+                    style={{ cursor: 'pointer', border: `1px solid ${t.border}`, background: 'none', color: t.sub, padding: '6px 9px', borderRadius: 8, fontSize: 12, fontWeight: 700 }}
+                  >
+                    Delete
+                  </button>
+                </div>
               )}
             </div>
           ))}
         </div>
+
+        {!readOnly && versions.length > 0 && (
+          <div style={{ padding: 14, borderTop: `1px solid ${t.border}` }}>
+            <button
+              onClick={onClearAll}
+              style={{ width: '100%', cursor: 'pointer', border: `1px solid ${t.border}`, background: 'none', color: t.sub, padding: '9px 13px', borderRadius: 8, fontSize: 12.5, fontWeight: 700 }}
+            >
+              Clear all history
+            </button>
+          </div>
+        )}
       </div>
     </>
   )

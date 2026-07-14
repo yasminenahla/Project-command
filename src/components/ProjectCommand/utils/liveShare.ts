@@ -120,3 +120,21 @@ export async function listVersions(shareId: string, limit = MAX_VERSIONS): Promi
     .filter(r => Array.isArray(r?.data?.tasks))
     .map(r => ({ id: r.id, createdAt: r.created_at, payload: r.data as SharePayload }))
 }
+
+/** Deletes a single snapshot. */
+export async function deleteVersion(id: number): Promise<void> {
+  const res = await safeFetch(`${VERSIONS_URL}?id=eq.${id}`, { method: 'DELETE', headers: HEADERS })
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '')
+    throw new Error(`Supabase rejected the delete: HTTP ${res.status}${detail ? ` — ${detail}` : ''}`)
+  }
+}
+
+/** Deletes every snapshot for a share — used by "Clear all history". */
+export async function deleteAllVersions(shareId: string): Promise<void> {
+  const res = await safeFetch(`${VERSIONS_URL}?share_id=eq.${encodeURIComponent(shareId)}`, { method: 'DELETE', headers: HEADERS })
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '')
+    throw new Error(`Supabase rejected the delete: HTTP ${res.status}${detail ? ` — ${detail}` : ''}`)
+  }
+}

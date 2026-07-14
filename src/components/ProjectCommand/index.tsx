@@ -111,7 +111,11 @@ export default function ProjectCommand({ onExit }: Props = {}) {
         loading={pc.loadingVersions}
         versions={pc.versions}
         readOnly={readOnly}
+        snapshotIntervalMs={pc.snapshotIntervalMs}
         onRestore={pc.restoreVersion}
+        onDelete={pc.deleteVersionEntry}
+        onClearAll={pc.clearAllHistory}
+        onSetSnapshotInterval={pc.setSnapshotInterval}
         onClose={pc.closeHistory}
       />
       <OwnerManager
