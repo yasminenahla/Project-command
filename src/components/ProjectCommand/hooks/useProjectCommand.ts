@@ -313,7 +313,12 @@ export function useProjectCommand() {
         // Reconcile instead of overwriting: any field you changed since the
         // last sync wins, everything else picks up the incoming remote value —
         // so your unsynced edits survive the refresh rather than being wiped.
-        const merged = mergeTaskLists(baseTasks ?? tasks, tasks, remote.tasks)
+        // If we never captured a merge ancestor (e.g. this board was saved by an
+        // older version of the app), fall back to an empty base rather than
+        // `tasks` itself — using `tasks` as its own ancestor would make every
+        // field look "unchanged," so the merge would silently take remote's
+        // version of everything and erase the local edits it's supposed to protect.
+        const merged = mergeTaskLists(baseTasks ?? [], tasks, remote.tasks)
         const stillPending = JSON.stringify(merged) !== JSON.stringify(remote.tasks)
         setPersisted(p => ({ ...p, tasks: merged, theme: remote.theme ?? p.theme, remoteVersion: remote.updatedAt, baseTasks: remote.tasks }))
         if (!stillPending) setDirty(false) // nothing local survived the merge — remote already reflected everything we had
