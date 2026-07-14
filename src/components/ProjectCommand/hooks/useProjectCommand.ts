@@ -10,6 +10,10 @@ import { buildHierarchicalOrder } from '../utils/hierarchy'
 import { mergeTaskLists } from '../utils/merge'
 
 const LS_KEY = 'pc-timeline-v1'
+// If a shared board sits open with no local edits and no sync for this long,
+// auto-refresh it — otherwise a long-idle tab can act on a very stale view
+// once someone resumes editing, causing avoidable conflicts.
+const IDLE_REFRESH_MS = 25 * 60 * 1000
 
 interface Persisted {
   tasks: Task[]
@@ -65,6 +69,9 @@ export function useProjectCommand() {
   // Set right before a remote-driven setPersisted (pull, or our own push's version bump) so the
   // auto-sync effect's next run — triggered by that same state change — doesn't mistake it for a local edit.
   const suppressDirtyRef = useRef(false)
+  // Bumped on every local edit and every successful push/pull — the idle-refresh
+  // timer below fires only once this has gone untouched for IDLE_REFRESH_MS.
+  const lastActivityRef = useRef(Date.now())
 
   useEffect(() => {
     try { localStorage.setItem(LS_KEY, JSON.stringify(persisted)) } catch { /* ignore quota errors */ }
@@ -90,6 +97,7 @@ export function useProjectCommand() {
           if (cancelled) return
           if (remote?.tasks?.length) {
             suppressDirtyRef.current = true
+            lastActivityRef.current = Date.now()
             setPersisted(p => ({ ...p, tasks: remote.tasks, theme: remote.theme ?? p.theme, shareId: id, role, remoteVersion: remote.updatedAt, baseTasks: remote.tasks }))
             flash(role === 'viewer' ? `Viewing shared board (read-only) · ${remote.tasks.length} tasks` : `Loaded shared board · ${remote.tasks.length} tasks`)
           } else {
@@ -122,6 +130,7 @@ export function useProjectCommand() {
     // This run was triggered by a pull we just did (hydrate/refresh/our own
     // push's version bump), not a local edit — nothing new to sync.
     if (suppressDirtyRef.current) { suppressDirtyRef.current = false; return }
+    lastActivityRef.current = Date.now()
     setDirty(true)
     clearTimeout(syncTimer.current)
     syncTimer.current = setTimeout(async () => {
@@ -137,6 +146,7 @@ export function useProjectCommand() {
         const newVersion = await updateShare(shareId, { tasks, theme })
         saveVersion(shareId, { tasks, theme }).catch(() => {})
         suppressDirtyRef.current = true
+        lastActivityRef.current = Date.now()
         setPersisted(p => ({ ...p, remoteVersion: newVersion, baseTasks: tasks }))
         setDirty(false)
         setConflict(false)
@@ -280,12 +290,14 @@ export function useProjectCommand() {
         id = created.id
         saveVersion(id, { tasks, theme }).catch(() => {})
         suppressDirtyRef.current = true
+        lastActivityRef.current = Date.now()
         setPersisted(p => ({ ...p, shareId: id, remoteVersion: created.updatedAt, baseTasks: tasks }))
         setDirty(false)
       } else if (role !== 'viewer') {
         const updatedAt = await updateShare(id, { tasks, theme })
         saveVersion(id, { tasks, theme }).catch(() => {})
         suppressDirtyRef.current = true
+        lastActivityRef.current = Date.now()
         setPersisted(p => ({ ...p, remoteVersion: updatedAt, baseTasks: tasks }))
         setDirty(false)
         setConflict(false)
@@ -303,19 +315,20 @@ export function useProjectCommand() {
     }
   }, [tasks, theme, shareId, role, flash])
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (auto = false) => {
     if (!shareId) {
-      flash('Not shared yet — click Share to sync with collaborators')
+      if (!auto) flash('Not shared yet — click Share to sync with collaborators')
       return
     }
     setRefreshing(true)
     try {
       const remote = await fetchShare(shareId)
       if (!remote?.tasks?.length) {
-        flash('Could not find that shared board anymore')
+        if (!auto) flash('Could not find that shared board anymore')
         return
       }
       setConflict(false)
+      lastActivityRef.current = Date.now()
       if (dirty && role !== 'viewer') {
         // Reconcile instead of overwriting: any field you changed since the
         // last sync wins, everything else picks up the incoming remote value —
@@ -329,20 +342,33 @@ export function useProjectCommand() {
         const stillPending = JSON.stringify(merged) !== JSON.stringify(remote.tasks)
         setPersisted(p => ({ ...p, tasks: merged, theme: remote.theme ?? p.theme, remoteVersion: remote.updatedAt, baseTasks: remote.tasks }))
         if (!stillPending) setDirty(false) // nothing local survived the merge — remote already reflected everything we had
-        flash(stillPending ? 'Refreshed and merged — your local edits were kept' : 'Refreshed — you were already up to date')
+        flash(stillPending
+          ? (auto ? 'Auto-refreshed after being idle — your unsynced edits were merged in' : 'Refreshed and merged — your local edits were kept')
+          : (auto ? 'Auto-refreshed after being idle' : 'Refreshed — you were already up to date'))
       } else {
         suppressDirtyRef.current = true
         setPersisted(p => ({ ...p, tasks: remote.tasks, theme: remote.theme ?? p.theme, remoteVersion: remote.updatedAt, baseTasks: remote.tasks }))
         setDirty(false)
-        flash(`Refreshed · ${remote.tasks.length} tasks`)
+        flash(auto ? `Auto-refreshed after being idle · ${remote.tasks.length} tasks` : `Refreshed · ${remote.tasks.length} tasks`)
       }
     } catch (err) {
       console.error('[ProjectCommand] refresh failed:', err)
-      flash(`Could not refresh: ${err instanceof Error ? err.message : 'unknown error'}`)
+      if (!auto) flash(`Could not refresh: ${err instanceof Error ? err.message : 'unknown error'}`)
     } finally {
       setRefreshing(false)
     }
   }, [shareId, flash, dirty, role, tasks, baseTasks])
+
+  // Periodically check whether this tab has gone untouched (no edits, no
+  // syncs) long enough to risk acting on stale data — if so, auto-refresh it.
+  useEffect(() => {
+    if (!shareId) return
+    const interval = setInterval(() => {
+      if (refreshing) return
+      if (Date.now() - lastActivityRef.current >= IDLE_REFRESH_MS) refresh(true)
+    }, 60_000)
+    return () => clearInterval(interval)
+  }, [shareId, refreshing, refresh])
 
   const openHistory = useCallback(async () => {
     if (!shareId) {
@@ -374,6 +400,7 @@ export function useProjectCommand() {
       const newVersion = await updateShare(shareId, entry.payload)
       await saveVersion(shareId, entry.payload)
       suppressDirtyRef.current = true
+      lastActivityRef.current = Date.now()
       setPersisted(p => ({
         ...p,
         tasks: entry.payload.tasks,
