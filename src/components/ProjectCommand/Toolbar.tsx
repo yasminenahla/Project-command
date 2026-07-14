@@ -156,7 +156,7 @@ export default function Toolbar({ theme: t, tab, onTab, q, onQ, group, onGroup, 
 
       {!readOnly && (
         <button
-          onClick={onAdd}
+          onClick={() => onAdd()}
           style={{
             cursor: 'pointer', border: 'none', background: t.accent, color: '#fff', padding: '9px 16px',
             borderRadius: 10, fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 7,

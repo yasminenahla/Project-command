@@ -30,6 +30,20 @@ interface Persisted {
   baseOwners?: OwnerEntry[]  // the owners list as of remoteVersion — merge ancestor, mirrors baseTasks
 }
 
+/** Coerces milestoneId/parentTaskId back to string|null if a past bug ever let something else (e.g. a stray DOM event) slip in. */
+function sanitizeTasks(tasks: Task[]): Task[] {
+  return tasks.map(t => {
+    const okMilestone = typeof t.milestoneId === 'string' || t.milestoneId == null
+    const okParent = typeof t.parentTaskId === 'string' || t.parentTaskId == null
+    if (okMilestone && okParent) return t
+    return {
+      ...t,
+      milestoneId: typeof t.milestoneId === 'string' ? t.milestoneId : null,
+      parentTaskId: typeof t.parentTaskId === 'string' ? t.parentTaskId : null,
+    }
+  })
+}
+
 function load(): Persisted {
   try {
     const raw = localStorage.getItem(LS_KEY)
@@ -37,7 +51,7 @@ function load(): Persisted {
       const s = JSON.parse(raw) as Partial<Persisted>
       if (s.tasks?.length) {
         return {
-          tasks: s.tasks,
+          tasks: sanitizeTasks(s.tasks),
           theme: s.theme ?? 'playful',
           tab:   s.tab   ?? 'tracker',
           scale: s.scale ?? 'weeks',
@@ -207,7 +221,11 @@ export function useProjectCommand() {
     const nt: Task = {
       id: uid(), name: 'New task', owner: '', status: 'Not started', priority: 'Medium',
       start, end: addDays(start, 4), progress: 0, deps: [], tags: [], notes: '',
-      milestoneId: milestoneId ?? null,
+      // Guard against a raw DOM event slipping in here (e.g. an onClick bound
+      // directly to this callback) — anything but a real id would otherwise
+      // get stored on the task and later break JSON.stringify with a circular-
+      // structure error the first time this board is synced or refreshed.
+      milestoneId: typeof milestoneId === 'string' ? milestoneId : null,
     }
     setTasks([...tasks, nt])
     setSel(nt.id)
