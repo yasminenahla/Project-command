@@ -52,7 +52,21 @@ export default function ProjectCommand({ onExit }: Props = {}) {
         onRefresh={pc.refresh}
         refreshing={pc.refreshing}
         readOnly={readOnly}
+        dirty={pc.dirty}
+        conflict={pc.conflict}
       />
+      {pc.conflict && (
+        <div style={{ margin: '10px 22px 0', padding: '10px 16px', background: 'rgba(214,69,69,.12)', border: '1px solid #D64545', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#D64545' }}>⚠ Another editor made changes to this board.</span>
+          <span style={{ fontSize: 12.5, color: t.sub }}>Your local edits are paused until you refresh — refreshing will replace them with the latest shared version.</span>
+          <button
+            onClick={() => pc.refresh()}
+            style={{ marginLeft: 'auto', cursor: 'pointer', border: 'none', background: '#D64545', color: '#fff', padding: '6px 14px', borderRadius: 8, fontSize: 12.5, fontWeight: 700 }}
+          >
+            Refresh now
+          </button>
+        </div>
+      )}
       <div style={{ padding: '0 22px 60px' }}>
         {pc.tab === 'tracker' && (
           <ActionTracker

@@ -15,6 +15,8 @@ interface Props {
   onRefresh: () => void
   refreshing: boolean
   readOnly?: boolean
+  dirty?: boolean
+  conflict?: boolean
 }
 
 const TABS: { id: PCTab; label: string; icon: string }[] = [
@@ -26,7 +28,7 @@ const TABS: { id: PCTab; label: string; icon: string }[] = [
 const GROUP_OPTS: PCGroup[] = ['None', 'Status', 'Owner', 'Priority', 'Milestone']
 const SCALE_OPTS: PCScale[] = ['days', 'weeks', 'months']
 
-export default function Toolbar({ theme: t, tab, onTab, q, onQ, group, onGroup, scale, onScale, onAdd, onAddMilestone, onRefresh, refreshing, readOnly }: Props) {
+export default function Toolbar({ theme: t, tab, onTab, q, onQ, group, onGroup, scale, onScale, onAdd, onAddMilestone, onRefresh, refreshing, readOnly, dirty, conflict }: Props) {
   return (
     <div
       style={{
@@ -82,11 +84,16 @@ export default function Toolbar({ theme: t, tab, onTab, q, onQ, group, onGroup, 
           </label>
 
           <button
-            onClick={onRefresh}
+            onClick={() => onRefresh()}
             disabled={refreshing}
-            title="Pull the latest board from the shared link"
+            title={
+              conflict ? 'Another editor made changes — refresh to see them before your edits can sync'
+              : dirty ? 'You have local changes that haven’t synced yet'
+              : 'Pull the latest board from the shared link'
+            }
             style={{
-              cursor: refreshing ? 'default' : 'pointer', border: `1px solid ${t.border}`, background: t.panel, color: t.text,
+              position: 'relative', cursor: refreshing ? 'default' : 'pointer',
+              border: `1px solid ${conflict ? '#D64545' : t.border}`, background: t.panel, color: t.text,
               padding: '9px 12px', borderRadius: 10, fontSize: 13, fontWeight: 700,
               display: 'flex', alignItems: 'center', gap: 7, boxShadow: t.shadow, opacity: refreshing ? 0.6 : 1,
             }}
@@ -100,6 +107,14 @@ export default function Toolbar({ theme: t, tab, onTab, q, onQ, group, onGroup, 
               ⟳
             </span>
             Refresh
+            {(dirty || conflict) && !refreshing && (
+              <span
+                style={{
+                  position: 'absolute', top: -4, right: -4, width: 10, height: 10, borderRadius: 99,
+                  background: conflict ? '#D64545' : '#F5B301', border: `2px solid ${t.panel}`,
+                }}
+              />
+            )}
           </button>
         </>
       )}

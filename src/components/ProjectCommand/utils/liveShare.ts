@@ -24,32 +24,47 @@ async function safeFetch(url: string, init?: RequestInit): Promise<Response> {
   }
 }
 
-async function upsert(id: string, payload: SharePayload): Promise<void> {
+// `updatedAt` is the write's own version stamp — callers keep the last one
+// they saw and compare it against the row's current stamp before writing
+// again, so a stale sync never blindly clobbers a newer one from another
+// editor (see useProjectCommand's conflict check).
+async function upsert(id: string, payload: SharePayload): Promise<string> {
   const res = await safeFetch(`${TABLE_URL}?on_conflict=id`, {
     method: 'POST',
-    headers: { ...HEADERS, Prefer: 'resolution=merge-duplicates,return=minimal' },
+    headers: { ...HEADERS, Prefer: 'resolution=merge-duplicates,return=representation' },
     body: JSON.stringify([{ id, data: payload, updated_at: new Date().toISOString() }]),
   })
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
     throw new Error(`Supabase rejected the write: HTTP ${res.status}${detail ? ` — ${detail}` : ''}`)
   }
+  const rows = await res.json().catch(() => null)
+  return Array.isArray(rows) ? rows[0]?.updated_at : new Date().toISOString()
 }
 
-export async function createShare(payload: SharePayload): Promise<string> {
+export async function createShare(payload: SharePayload): Promise<{ id: string; updatedAt: string }> {
   const id = crypto.randomUUID()
-  await upsert(id, payload)
-  return id
+  const updatedAt = await upsert(id, payload)
+  return { id, updatedAt }
 }
 
-export async function updateShare(id: string, payload: SharePayload): Promise<void> {
-  await upsert(id, payload)
+export async function updateShare(id: string, payload: SharePayload): Promise<string> {
+  return upsert(id, payload)
 }
 
-export async function fetchShare(id: string): Promise<SharePayload | null> {
-  const res = await safeFetch(`${TABLE_URL}?id=eq.${encodeURIComponent(id)}&select=data`, { headers: HEADERS })
+export async function fetchShare(id: string): Promise<(SharePayload & { updatedAt: string }) | null> {
+  const res = await safeFetch(`${TABLE_URL}?id=eq.${encodeURIComponent(id)}&select=data,updated_at`, { headers: HEADERS })
   if (!res.ok) return null
   const rows = await res.json()
-  const data = Array.isArray(rows) ? rows[0]?.data : null
-  return Array.isArray(data?.tasks) ? (data as SharePayload) : null
+  const row = Array.isArray(rows) ? rows[0] : null
+  const data = row?.data
+  return Array.isArray(data?.tasks) ? { ...(data as SharePayload), updatedAt: row.updated_at } : null
+}
+
+/** Cheap check for whether the shared board has changed since a given version, without pulling the whole payload. */
+export async function fetchShareVersion(id: string): Promise<string | null> {
+  const res = await safeFetch(`${TABLE_URL}?id=eq.${encodeURIComponent(id)}&select=updated_at`, { headers: HEADERS })
+  if (!res.ok) return null
+  const rows = await res.json().catch(() => null)
+  return Array.isArray(rows) ? rows[0]?.updated_at ?? null : null
 }

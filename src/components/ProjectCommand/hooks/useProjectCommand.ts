@@ -4,7 +4,7 @@ import { STATUSES } from '../types'
 import { seedTasks } from '../seed'
 import { addDays, uid } from '../utils/dates'
 import { buildShareUrl, clearShareFromLocation, readLegacySnapshotFromLocation, readShareIdFromLocation, readShareRoleFromLocation } from '../utils/shareLink'
-import { createShare, fetchShare, updateShare } from '../utils/liveShare'
+import { createShare, fetchShare, fetchShareVersion, updateShare } from '../utils/liveShare'
 import { buildHierarchicalOrder } from '../utils/hierarchy'
 
 const LS_KEY = 'pc-timeline-v1'
@@ -17,6 +17,7 @@ interface Persisted {
   group: PCGroup
   shareId?: string  // jsonblob id this board auto-syncs to, once shared
   role:  PCRole     // this browser's access level on the current board — 'viewer' if opened via a view-only link
+  remoteVersion?: string  // the shared row's updated_at as of our last successful push/pull — used to detect a concurrent editor's changes before overwriting them
 }
 
 function load(): Persisted {
@@ -33,6 +34,7 @@ function load(): Persisted {
           group: s.group ?? 'None',
           shareId: s.shareId,
           role: s.role ?? 'editor',
+          remoteVersion: s.remoteVersion,
         }
       }
     }
@@ -47,10 +49,15 @@ export function useProjectCommand() {
   const [sel, setSel]       = useState<string | null>(null)
   const [toast, setToast]   = useState('')
   const [refreshing, setRefreshing] = useState(false)
+  const [dirty, setDirty]   = useState(false)   // local edits that haven't synced to the share yet
+  const [conflict, setConflict] = useState(false) // another editor pushed a change we haven't pulled yet — our own sync is paused until refresh
 
   const toastTimer = useRef<ReturnType<typeof setTimeout>>()
   const dragId      = useRef<string | null>(null)
   const syncTimer   = useRef<ReturnType<typeof setTimeout>>()
+  // Set right before a remote-driven setPersisted (pull, or our own push's version bump) so the
+  // auto-sync effect's next run — triggered by that same state change — doesn't mistake it for a local edit.
+  const suppressDirtyRef = useRef(false)
 
   useEffect(() => {
     try { localStorage.setItem(LS_KEY, JSON.stringify(persisted)) } catch { /* ignore quota errors */ }
@@ -75,7 +82,8 @@ export function useProjectCommand() {
           const remote = await fetchShare(id)
           if (cancelled) return
           if (remote?.tasks?.length) {
-            setPersisted(p => ({ ...p, tasks: remote.tasks, theme: remote.theme ?? p.theme, shareId: id, role }))
+            suppressDirtyRef.current = true
+            setPersisted(p => ({ ...p, tasks: remote.tasks, theme: remote.theme ?? p.theme, shareId: id, role, remoteVersion: remote.updatedAt }))
             flash(role === 'viewer' ? `Viewing shared board (read-only) · ${remote.tasks.length} tasks` : `Loaded shared board · ${remote.tasks.length} tasks`)
           } else {
             flash('That share link looks empty or invalid')
@@ -97,21 +105,39 @@ export function useProjectCommand() {
     return () => { cancelled = true }
   }, [])
 
-  const { tasks, theme, tab, scale, group, shareId, role } = persisted
+  const { tasks, theme, tab, scale, group, shareId, role, remoteVersion } = persisted
 
   // Once a board is shared, keep the remote copy fresh as it's edited —
   // debounced so rapid edits collapse into one sync a little after they stop.
   // Viewers never write back — they only ever pull.
   useEffect(() => {
     if (!shareId || role === 'viewer') return
+    // This run was triggered by a pull we just did (hydrate/refresh/our own
+    // push's version bump), not a local edit — nothing new to sync.
+    if (suppressDirtyRef.current) { suppressDirtyRef.current = false; return }
+    setDirty(true)
     clearTimeout(syncTimer.current)
-    syncTimer.current = setTimeout(() => {
-      updateShare(shareId, { tasks, theme }).catch(() => {
+    syncTimer.current = setTimeout(async () => {
+      try {
+        // Someone else may have pushed since we last pulled — check before
+        // overwriting their changes with our (possibly stale) local copy.
+        const currentVersion = await fetchShareVersion(shareId).catch(() => null)
+        if (currentVersion && remoteVersion && currentVersion !== remoteVersion) {
+          setConflict(true)
+          flash('Another editor made changes — refresh to see them before your edits can sync')
+          return
+        }
+        const newVersion = await updateShare(shareId, { tasks, theme })
+        suppressDirtyRef.current = true
+        setPersisted(p => ({ ...p, remoteVersion: newVersion }))
+        setDirty(false)
+        setConflict(false)
+      } catch {
         flash('Could not sync your latest changes to the share link')
-      })
+      }
     }, 1200)
     return () => clearTimeout(syncTimer.current)
-  }, [shareId, tasks, theme, role, flash])
+  }, [shareId, tasks, theme, role, remoteVersion, flash])
 
   const setTasks = useCallback((next: Task[]) => {
     setPersisted(p => ({ ...p, tasks: next }))
@@ -242,10 +268,17 @@ export function useProjectCommand() {
     try {
       let id = shareId
       if (!id) {
-        id = await createShare({ tasks, theme })
-        setPersisted(p => ({ ...p, shareId: id }))
+        const created = await createShare({ tasks, theme })
+        id = created.id
+        suppressDirtyRef.current = true
+        setPersisted(p => ({ ...p, shareId: id, remoteVersion: created.updatedAt }))
+        setDirty(false)
       } else if (role !== 'viewer') {
-        await updateShare(id, { tasks, theme })
+        const updatedAt = await updateShare(id, { tasks, theme })
+        suppressDirtyRef.current = true
+        setPersisted(p => ({ ...p, remoteVersion: updatedAt }))
+        setDirty(false)
+        setConflict(false)
       }
       const url = buildShareUrl(id, linkRole)
       try {
@@ -260,16 +293,25 @@ export function useProjectCommand() {
     }
   }, [tasks, theme, shareId, role, flash])
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (force = false) => {
     if (!shareId) {
       flash('Not shared yet — click Share to sync with collaborators')
       return
+    }
+    if (!force && dirty && role !== 'viewer') {
+      const ok = window.confirm(
+        'You have local changes that haven’t synced yet. Refreshing will replace them with the latest shared version, and your unsynced edits will be lost.\n\nRefresh anyway?',
+      )
+      if (!ok) return
     }
     setRefreshing(true)
     try {
       const remote = await fetchShare(shareId)
       if (remote?.tasks?.length) {
-        setPersisted(p => ({ ...p, tasks: remote.tasks, theme: remote.theme ?? p.theme }))
+        suppressDirtyRef.current = true
+        setPersisted(p => ({ ...p, tasks: remote.tasks, theme: remote.theme ?? p.theme, remoteVersion: remote.updatedAt }))
+        setDirty(false)
+        setConflict(false)
         flash(`Refreshed · ${remote.tasks.length} tasks`)
       } else {
         flash('Could not find that shared board anymore')
@@ -280,7 +322,7 @@ export function useProjectCommand() {
     } finally {
       setRefreshing(false)
     }
-  }, [shareId, flash])
+  }, [shareId, flash, dirty, role])
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase()
@@ -294,7 +336,7 @@ export function useProjectCommand() {
   const hierarchicalFiltered = useMemo(() => buildHierarchicalOrder(filtered), [filtered])
 
   return {
-    tasks, filtered, theme, tab, scale, group, q, depsFor, sel, toast, refreshing, role,
+    tasks, filtered, theme, tab, scale, group, q, depsFor, sel, toast, refreshing, role, dirty, conflict,
     milestones, hierarchicalFiltered,
     setTheme, setTab, setScale, setGroup, setQ, setDepsFor, setSel, flash,
     taskName, update, addTask, addMilestone, addSubtask, setMilestone, del, move, startDragReorder, dropReorder,
