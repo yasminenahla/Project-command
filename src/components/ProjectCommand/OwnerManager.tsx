@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { OwnerEntry, PCRole, PCTheme } from './types'
+import { recipientCount } from './utils/notify'
 
 interface Props {
   theme:   PCTheme
@@ -135,13 +136,20 @@ export default function OwnerManager({ theme: t, open, owners, dirty, onAdd, onU
                   Email (optional — enables "Notify")
                   <input
                     type="email"
+                    multiple
                     defaultValue={o.email ?? ''}
                     key={`${o.name}-email-${o.email ?? ''}`}
-                    placeholder="name@company.com"
+                    placeholder="name@company.com, or several, comma-separated"
+                    title="If this name represents more than one person, list their emails separated by commas — Notify will send to all of them at once"
                     onBlur={e => onUpdateEmail(o.name, e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                     style={{ ...inputStyle, marginTop: 5, fontWeight: 600, fontSize: 12 }}
                   />
+                  {recipientCount(o.email) > 1 && (
+                    <div style={{ marginTop: 4, fontSize: 10.5, fontWeight: 700, color: t.accent, textTransform: 'none', letterSpacing: 0 }}>
+                      Notify will message all {recipientCount(o.email)} people together
+                    </div>
+                  )}
                 </label>
                 <label style={{ fontSize: 10.5, fontWeight: 800, color: t.sub, textTransform: 'uppercase', letterSpacing: 0.4 }}>
                   Access
@@ -179,9 +187,10 @@ export default function OwnerManager({ theme: t, open, owners, dirty, onAdd, onU
           <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
             <input
               type="email"
+              multiple
               value={newEmail}
               onChange={e => setNewEmail(e.target.value)}
-              placeholder="Email (optional)"
+              placeholder="Email(s), comma-separated for a group"
               style={{ ...inputStyle, flex: 1 }}
             />
             <select

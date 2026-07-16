@@ -4,7 +4,7 @@ import type { OwnerEntry, PCGroup, PCTheme, Task, TaskPriority } from '../types'
 import { STATUS_COLOR, PRIORITY_COLOR, LATE_COLOR, ownerColor } from '../theme'
 import { diffDays, isTaskLate } from '../utils/dates'
 import { taskIndentLevel } from '../utils/hierarchy'
-import { buildOwnerMailto } from '../utils/notify'
+import { buildOwnerMailto, recipientCount } from '../utils/notify'
 import { buildShareUrl } from '../utils/shareLink'
 import InlineInput from './InlineInput'
 import DepsCell from './DepsCell'
@@ -343,6 +343,7 @@ function TrackerRow({
           {task.owner && (() => {
             const ownerEntry = owners.find(o => o.name === task.owner)
             const email = ownerEntry?.email
+            const count = recipientCount(email)
             // Always a view-only link unless the roster explicitly grants this
             // person editor access — notifying someone shouldn't hand out edit
             // rights by accident.
@@ -351,7 +352,11 @@ function TrackerRow({
               <a
                 href={email ? buildOwnerMailto(email, task, boardUrl) : undefined}
                 onClick={e => { if (!email) e.preventDefault() }}
-                title={email ? `Email ${task.owner} about this task` : `Add an email for ${task.owner} in the team roster to enable this`}
+                title={
+                  email
+                    ? count > 1 ? `Email all ${count} people under "${task.owner}" about this task` : `Email ${task.owner} about this task`
+                    : `Add an email for ${task.owner} in the team roster to enable this`
+                }
                 style={{
                   flexShrink: 0, cursor: email ? 'pointer' : 'default', textDecoration: 'none', display: 'inline-block',
                   color: t.sub, fontSize: 13, opacity: email ? 0.75 : 0.3, padding: '4px 2px',
