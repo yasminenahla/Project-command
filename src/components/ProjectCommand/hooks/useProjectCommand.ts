@@ -6,7 +6,7 @@ import { addDays, uid } from '../utils/dates'
 import { buildShareUrl, clearShareFromLocation, readLegacySnapshotFromLocation, readShareIdFromLocation, readShareRoleFromLocation } from '../utils/shareLink'
 import { createShare, deleteAllVersions, deleteVersion, fetchShare, fetchShareVersion, listVersions, saveVersion, updateShare } from '../utils/liveShare'
 import type { VersionEntry } from '../utils/liveShare'
-import { buildHierarchicalOrder, computeActionNumbers, retargetTask } from '../utils/hierarchy'
+import { buildHierarchicalOrder, computeActionNumbers, moveWithinGroup, retargetTask } from '../utils/hierarchy'
 import { mergeOwnerLists, mergeTaskLists } from '../utils/merge'
 import { dedupeOwners, deriveInitialOwners, suggestOwner } from '../utils/ownerSuggest'
 
@@ -294,12 +294,7 @@ export function useProjectCommand() {
   }, [tasks, setTasks])
 
   const move = useCallback((id: string, dir: 1 | -1) => {
-    const a = tasks.slice()
-    const i = a.findIndex(t => t.id === id)
-    const j = i + dir
-    if (j < 0 || j >= a.length) return
-    ;[a[i], a[j]] = [a[j], a[i]]
-    setTasks(a)
+    setTasks(moveWithinGroup(tasks, id, dir))
   }, [tasks, setTasks])
 
   const startDragReorder = useCallback((id: string) => { dragId.current = id }, [])

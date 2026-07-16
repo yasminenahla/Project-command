@@ -143,6 +143,7 @@ export default function ActionTracker({
                 task={task}
                 theme={t}
                 grouped={grouped}
+                showHierarchy={showHierarchy}
                 indentLevel={showHierarchy ? taskIndentLevel(task, byId) : 0}
                 selected={sel === task.id}
                 depsOpen={depsFor === task.id}
@@ -177,6 +178,7 @@ interface RowProps {
   task:       Task
   theme:      PCTheme
   grouped:    boolean
+  showHierarchy: boolean
   indentLevel: number
   selected:   boolean
   depsOpen:   boolean
@@ -201,7 +203,7 @@ interface RowProps {
 }
 
 function TrackerRow({
-  task, theme: t, grouped, indentLevel, selected, depsOpen, allTasks, milestones, actionNumber, taskName,
+  task, theme: t, grouped, showHierarchy, indentLevel, selected, depsOpen, allTasks, milestones, actionNumber, taskName,
   onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone, onAddSubtask, onRenumber, owners, readOnly,
 }: RowProps) {
   const done = task.status === 'Done'
@@ -229,23 +231,25 @@ function TrackerRow({
       }}
     >
       {cell(
-        !grouped ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+          {!grouped ? (
             <span style={{ cursor: readOnly ? 'default' : 'grab', color: t.sub, fontSize: 13, lineHeight: 0.8, letterSpacing: -2, opacity: readOnly ? 0.4 : 1 }}>⠿</span>
+          ) : task.isMilestone ? (
+            <span title="Milestone" style={{ color: t.accent, fontSize: 13 }}>◆</span>
+          ) : <span style={{ color: t.sub, fontSize: 12 }}>·</span>}
+          {showHierarchy && (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <button onClick={() => onMove(task.id, -1)} disabled={readOnly} style={{ border: 'none', background: 'none', cursor: readOnly ? 'default' : 'pointer', color: t.sub, fontSize: 9, lineHeight: 0.7, padding: 0, opacity: readOnly ? 0.4 : 1 }}>▲</button>
-              <button onClick={() => onMove(task.id, 1)} disabled={readOnly} style={{ border: 'none', background: 'none', cursor: readOnly ? 'default' : 'pointer', color: t.sub, fontSize: 9, lineHeight: 0.7, padding: 0, opacity: readOnly ? 0.4 : 1 }}>▼</button>
+              <button onClick={() => onMove(task.id, -1)} disabled={readOnly} title="Move up among its siblings" style={{ border: 'none', background: 'none', cursor: readOnly ? 'default' : 'pointer', color: t.sub, fontSize: 9, lineHeight: 0.7, padding: 0, opacity: readOnly ? 0.4 : 1 }}>▲</button>
+              <button onClick={() => onMove(task.id, 1)} disabled={readOnly} title="Move down among its siblings" style={{ border: 'none', background: 'none', cursor: readOnly ? 'default' : 'pointer', color: t.sub, fontSize: 9, lineHeight: 0.7, padding: 0, opacity: readOnly ? 0.4 : 1 }}>▼</button>
             </div>
-          </div>
-        ) : task.isMilestone ? (
-          <span title="Milestone" style={{ color: t.accent, fontSize: 13 }}>◆</span>
-        ) : <span style={{ color: t.sub, fontSize: 12 }}>·</span>,
+          )}
+        </div>,
         { width: 26 },
       )}
 
       {cell(
         task.isMilestone ? (
-          <span style={{ fontSize: 12.5, fontWeight: 800, color: t.accent }}>{actionNumber}</span>
+          <span title="Action number" style={{ fontSize: 12.5, fontWeight: 800, color: t.accent }}>{actionNumber}</span>
         ) : (
           <InlineInput
             key={numAttempt}

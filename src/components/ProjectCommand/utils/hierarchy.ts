@@ -159,6 +159,39 @@ export type RetargetResult = { tasks: Task[] } | { error: string }
  * Milestones themselves aren't retargetable this way (their own numbers are
  * purely positional and read-only); use the existing reorder controls.
  */
+/**
+ * Moves a task/milestone one step up or down among its own siblings — the
+ * same peer group retargetTask reasons about (other milestones, other tasks
+ * under the same milestone, other subtasks under the same parent, or other
+ * unassigned top-level tasks) — rather than a blind swap with whatever
+ * happens to sit next to it in the raw array. That keeps the ▲▼ controls
+ * meaningful (and their action-number effect predictable) no matter how the
+ * board is currently grouped or what's interleaved from other groups.
+ */
+export function moveWithinGroup(allTasks: Task[], id: string, dir: 1 | -1): Task[] {
+  const index = allTasks.findIndex(t => t.id === id)
+  if (index === -1) return allTasks
+  const task = allTasks[index]
+
+  const predicate: (t: Task) => boolean = task.isMilestone
+    ? t => !!t.isMilestone
+    : task.parentTaskId
+    ? t => t.parentTaskId === task.parentTaskId
+    : task.milestoneId
+    ? t => !t.isMilestone && !t.parentTaskId && t.milestoneId === task.milestoneId
+    : t => !t.isMilestone && !t.parentTaskId && !t.milestoneId
+
+  const group = siblingIndices(allTasks, predicate)
+  const posInGroup = group.indexOf(index)
+  const swapPos = posInGroup + dir
+  if (swapPos < 0 || swapPos >= group.length) return allTasks
+
+  const next = allTasks.slice()
+  const j = group[swapPos]
+  ;[next[index], next[j]] = [next[j], next[index]]
+  return next
+}
+
 export function retargetTask(allTasks: Task[], taskId: string, rawInput: string): RetargetResult {
   const input = rawInput.trim()
   const task = allTasks.find(t => t.id === taskId)
