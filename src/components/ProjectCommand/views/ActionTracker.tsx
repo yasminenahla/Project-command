@@ -4,6 +4,7 @@ import type { OwnerEntry, PCGroup, PCTheme, Task, TaskPriority } from '../types'
 import { STATUS_COLOR, PRIORITY_COLOR, LATE_COLOR, ownerColor } from '../theme'
 import { diffDays, isTaskLate } from '../utils/dates'
 import { taskIndentLevel } from '../utils/hierarchy'
+import { buildOwnerMailto } from '../utils/notify'
 import InlineInput from './InlineInput'
 import DepsCell from './DepsCell'
 
@@ -335,6 +336,22 @@ function TrackerRow({
               <option value={task.owner}>{task.owner}</option>
             )}
           </select>
+          {task.owner && (() => {
+            const email = owners.find(o => o.name === task.owner)?.email
+            return (
+              <a
+                href={email ? buildOwnerMailto(email, task, window.location.href) : undefined}
+                onClick={e => { if (!email) e.preventDefault() }}
+                title={email ? `Email ${task.owner} about this task` : `Add an email for ${task.owner} in the team roster to enable this`}
+                style={{
+                  flexShrink: 0, cursor: email ? 'pointer' : 'default', textDecoration: 'none', display: 'inline-block',
+                  color: t.sub, fontSize: 13, opacity: email ? 0.75 : 0.3, padding: '4px 2px',
+                }}
+              >
+                ✉
+              </a>
+            )
+          })()}
         </div>,
       )}
 

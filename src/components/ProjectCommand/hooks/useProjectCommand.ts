@@ -338,17 +338,22 @@ export function useProjectCommand() {
     flash(`Imported ${imported.length} tasks`)
   }, [setTasks, flash])
 
-  const addOwner = useCallback((name: string, keywords: string[] = []) => {
+  const addOwner = useCallback((name: string, keywords: string[] = [], email?: string) => {
     const trimmed = name.trim()
     if (!trimmed) return
     setPersisted(p => p.owners.some(o => o.name.toLowerCase() === trimmed.toLowerCase())
       ? p
-      : { ...p, owners: [...p.owners, { name: trimmed, keywords }] })
+      : { ...p, owners: [...p.owners, { name: trimmed, keywords, email: email?.trim() || undefined }] })
     setRosterDirty(true)
   }, [])
 
   const updateOwnerKeywords = useCallback((name: string, keywords: string[]) => {
     setPersisted(p => ({ ...p, owners: p.owners.map(o => o.name === name ? { ...o, keywords } : o) }))
+    setRosterDirty(true)
+  }, [])
+
+  const updateOwnerEmail = useCallback((name: string, email: string) => {
+    setPersisted(p => ({ ...p, owners: p.owners.map(o => o.name === name ? { ...o, email: email.trim() || undefined } : o) }))
     setRosterDirty(true)
   }, [])
 
@@ -637,7 +642,7 @@ export function useProjectCommand() {
     taskName, update, addTask, addMilestone, addSubtask, setMilestone, del, move, startDragReorder, dropReorder,
     cycleStatus, toggleDone, toggleDep, importTasks, setTasks, share, refresh, renumberTask,
     openHistory, closeHistory, restoreVersion, deleteVersionEntry, clearAllHistory, setSnapshotInterval,
-    addOwner, updateOwnerKeywords, renameOwner, removeOwner, moveOwner, openOwnerManager, closeOwnerManager, saveRoster,
+    addOwner, updateOwnerKeywords, updateOwnerEmail, renameOwner, removeOwner, moveOwner, openOwnerManager, closeOwnerManager, saveRoster,
   }
 }
 

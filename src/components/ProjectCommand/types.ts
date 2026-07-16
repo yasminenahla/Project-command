@@ -27,6 +27,7 @@ export type PCRole        = 'editor' | 'viewer'
 export interface OwnerEntry {
   name:     string
   keywords: string[]  // if a task's name/notes/tags contain one of these, this owner is auto-suggested
+  email?:   string     // lets the tracker offer a "Notify" mailto link for tasks assigned to this person
 }
 
 export interface PCTheme {

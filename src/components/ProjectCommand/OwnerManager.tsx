@@ -6,8 +6,9 @@ interface Props {
   open:    boolean
   owners:  OwnerEntry[]
   dirty:   boolean
-  onAdd:    (name: string, keywords: string[]) => void
+  onAdd:    (name: string, keywords: string[], email?: string) => void
   onUpdateKeywords: (name: string, keywords: string[]) => void
+  onUpdateEmail: (name: string, email: string) => void
   onRename: (oldName: string, newName: string) => void
   onRemove: (name: string) => void
   onMove:   (name: string, dir: 1 | -1) => void
@@ -19,9 +20,10 @@ function parseKeywords(v: string): string[] {
   return v.split(',').map(s => s.trim()).filter(Boolean)
 }
 
-export default function OwnerManager({ theme: t, open, owners, dirty, onAdd, onUpdateKeywords, onRename, onRemove, onMove, onSave, onClose }: Props) {
+export default function OwnerManager({ theme: t, open, owners, dirty, onAdd, onUpdateKeywords, onUpdateEmail, onRename, onRemove, onMove, onSave, onClose }: Props) {
   const [newName, setNewName] = useState('')
   const [newKeywords, setNewKeywords] = useState('')
+  const [newEmail, setNewEmail] = useState('')
 
   if (!open) return null
 
@@ -123,9 +125,21 @@ export default function OwnerManager({ theme: t, open, owners, dirty, onAdd, onU
                   style={{ ...inputStyle, marginTop: 5, fontWeight: 600, fontSize: 12 }}
                 />
               </label>
-              <div style={{ fontSize: 11, color: t.sub, marginTop: 5 }}>
+              <div style={{ fontSize: 11, color: t.sub, marginTop: 5, marginBottom: 8 }}>
                 A task naming one of these gets {o.name} auto-assigned as owner (if none is set yet).
               </div>
+              <label style={{ fontSize: 10.5, fontWeight: 800, color: t.sub, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                Email (optional — enables the "Notify" button on their tasks)
+                <input
+                  type="email"
+                  defaultValue={o.email ?? ''}
+                  key={`${o.name}-email-${o.email ?? ''}`}
+                  placeholder="name@company.com"
+                  onBlur={e => onUpdateEmail(o.name, e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                  style={{ ...inputStyle, marginTop: 5, fontWeight: 600, fontSize: 12 }}
+                />
+              </label>
             </div>
           ))}
         </div>
@@ -144,14 +158,22 @@ export default function OwnerManager({ theme: t, open, owners, dirty, onAdd, onU
             value={newKeywords}
             onChange={e => setNewKeywords(e.target.value)}
             placeholder="Keywords (optional, comma-separated)"
+            style={{ ...inputStyle, marginBottom: 8 }}
+          />
+          <input
+            type="email"
+            value={newEmail}
+            onChange={e => setNewEmail(e.target.value)}
+            placeholder="Email (optional)"
             style={{ ...inputStyle, marginBottom: 10 }}
           />
           <button
             onClick={() => {
               if (!newName.trim()) return
-              onAdd(newName, parseKeywords(newKeywords))
+              onAdd(newName, parseKeywords(newKeywords), newEmail)
               setNewName('')
               setNewKeywords('')
+              setNewEmail('')
             }}
             disabled={!newName.trim()}
             style={{

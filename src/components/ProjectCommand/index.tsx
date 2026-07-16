@@ -127,6 +127,7 @@ export default function ProjectCommand({ onExit }: Props = {}) {
         dirty={pc.rosterDirty}
         onAdd={pc.addOwner}
         onUpdateKeywords={pc.updateOwnerKeywords}
+        onUpdateEmail={pc.updateOwnerEmail}
         onRename={pc.renameOwner}
         onRemove={pc.removeOwner}
         onMove={pc.moveOwner}
