@@ -5,6 +5,7 @@ import { STATUS_COLOR, PRIORITY_COLOR, LATE_COLOR, ownerColor } from '../theme'
 import { diffDays, isTaskLate } from '../utils/dates'
 import { taskIndentLevel } from '../utils/hierarchy'
 import { buildOwnerMailto } from '../utils/notify'
+import { buildShareUrl } from '../utils/shareLink'
 import InlineInput from './InlineInput'
 import DepsCell from './DepsCell'
 
@@ -14,6 +15,7 @@ interface Props {
   allTasks:   Task[]      // full set, for deps popover
   milestones: Task[]      // tasks marked isMilestone, for the Milestone column's options
   actionNumbers: Map<string, string>
+  shareId?:   string      // lets the "Notify" link point back at the live board, scoped to the owner's access level
   group:      PCGroup
   sel:        string | null
   depsFor:    string | null
@@ -40,7 +42,7 @@ const COLS = ['', '', '#', 'Task', 'Owner', 'Status', 'Priority', 'Milestone', '
 const STATUS_C_DONE = STATUS_COLOR.Done
 
 export default function ActionTracker({
-  theme: t, tasks, allTasks, milestones, actionNumbers, group, sel, depsFor, taskName,
+  theme: t, tasks, allTasks, milestones, actionNumbers, shareId, group, sel, depsFor, taskName,
   onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone, onAddSubtask, onRenumber, owners, onManageOwners, rosterDirty, readOnly,
 }: Props) {
   const grouped = group !== 'None'
@@ -151,6 +153,7 @@ export default function ActionTracker({
                 allTasks={allTasks}
                 milestones={milestones}
                 actionNumber={actionNumbers.get(task.id) ?? ''}
+                shareId={shareId}
                 taskName={taskName}
                 onUpdate={onUpdate}
                 onDelete={onDelete}
@@ -186,6 +189,7 @@ interface RowProps {
   allTasks:   Task[]
   milestones: Task[]
   actionNumber: string
+  shareId?:   string
   taskName:   (id: string) => string
   onUpdate:   (id: string, patch: Partial<Task>) => void
   onDelete:   (id: string) => void
@@ -204,7 +208,7 @@ interface RowProps {
 }
 
 function TrackerRow({
-  task, theme: t, grouped, showHierarchy, indentLevel, selected, depsOpen, allTasks, milestones, actionNumber, taskName,
+  task, theme: t, grouped, showHierarchy, indentLevel, selected, depsOpen, allTasks, milestones, actionNumber, shareId, taskName,
   onUpdate, onDelete, onMove, onDragStart, onDrop, onCycleStatus, onToggleDone, onToggleDep, onSetDepsFor, onSetMilestone, onAddSubtask, onRenumber, owners, readOnly,
 }: RowProps) {
   const done = task.status === 'Done'
@@ -337,10 +341,15 @@ function TrackerRow({
             )}
           </select>
           {task.owner && (() => {
-            const email = owners.find(o => o.name === task.owner)?.email
+            const ownerEntry = owners.find(o => o.name === task.owner)
+            const email = ownerEntry?.email
+            // Always a view-only link unless the roster explicitly grants this
+            // person editor access — notifying someone shouldn't hand out edit
+            // rights by accident.
+            const boardUrl = shareId ? buildShareUrl(shareId, ownerEntry?.role === 'editor' ? 'editor' : 'viewer') : undefined
             return (
               <a
-                href={email ? buildOwnerMailto(email, task, window.location.href) : undefined}
+                href={email ? buildOwnerMailto(email, task, boardUrl) : undefined}
                 onClick={e => { if (!email) e.preventDefault() }}
                 title={email ? `Email ${task.owner} about this task` : `Add an email for ${task.owner} in the team roster to enable this`}
                 style={{

@@ -338,12 +338,12 @@ export function useProjectCommand() {
     flash(`Imported ${imported.length} tasks`)
   }, [setTasks, flash])
 
-  const addOwner = useCallback((name: string, keywords: string[] = [], email?: string) => {
+  const addOwner = useCallback((name: string, keywords: string[] = [], email?: string, ownerRole?: PCRole) => {
     const trimmed = name.trim()
     if (!trimmed) return
     setPersisted(p => p.owners.some(o => o.name.toLowerCase() === trimmed.toLowerCase())
       ? p
-      : { ...p, owners: [...p.owners, { name: trimmed, keywords, email: email?.trim() || undefined }] })
+      : { ...p, owners: [...p.owners, { name: trimmed, keywords, email: email?.trim() || undefined, role: ownerRole }] })
     setRosterDirty(true)
   }, [])
 
@@ -354,6 +354,11 @@ export function useProjectCommand() {
 
   const updateOwnerEmail = useCallback((name: string, email: string) => {
     setPersisted(p => ({ ...p, owners: p.owners.map(o => o.name === name ? { ...o, email: email.trim() || undefined } : o) }))
+    setRosterDirty(true)
+  }, [])
+
+  const updateOwnerRole = useCallback((name: string, ownerRole: PCRole) => {
+    setPersisted(p => ({ ...p, owners: p.owners.map(o => o.name === name ? { ...o, role: ownerRole } : o) }))
     setRosterDirty(true)
   }, [])
 
@@ -635,14 +640,14 @@ export function useProjectCommand() {
   }, [tasks, role, setTasks, flash])
 
   return {
-    tasks, filtered, theme, tab, scale, group, q, depsFor, sel, toast, refreshing, role, dirty, conflict,
+    tasks, filtered, theme, tab, scale, group, q, depsFor, sel, toast, refreshing, role, dirty, conflict, shareId,
     milestones, hierarchicalFiltered, historyOpen, versions, loadingVersions, owners, ownerManagerOpen, rosterDirty,
     snapshotIntervalMs, actionNumbers,
     setTheme, setTab, setScale, setGroup, setQ, setDepsFor, setSel, flash,
     taskName, update, addTask, addMilestone, addSubtask, setMilestone, del, move, startDragReorder, dropReorder,
     cycleStatus, toggleDone, toggleDep, importTasks, setTasks, share, refresh, renumberTask,
     openHistory, closeHistory, restoreVersion, deleteVersionEntry, clearAllHistory, setSnapshotInterval,
-    addOwner, updateOwnerKeywords, updateOwnerEmail, renameOwner, removeOwner, moveOwner, openOwnerManager, closeOwnerManager, saveRoster,
+    addOwner, updateOwnerKeywords, updateOwnerEmail, updateOwnerRole, renameOwner, removeOwner, moveOwner, openOwnerManager, closeOwnerManager, saveRoster,
   }
 }
 

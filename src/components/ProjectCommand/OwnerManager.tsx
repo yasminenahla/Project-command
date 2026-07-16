@@ -1,14 +1,15 @@
 import { useState } from 'react'
-import type { OwnerEntry, PCTheme } from './types'
+import type { OwnerEntry, PCRole, PCTheme } from './types'
 
 interface Props {
   theme:   PCTheme
   open:    boolean
   owners:  OwnerEntry[]
   dirty:   boolean
-  onAdd:    (name: string, keywords: string[], email?: string) => void
+  onAdd:    (name: string, keywords: string[], email?: string, role?: PCRole) => void
   onUpdateKeywords: (name: string, keywords: string[]) => void
   onUpdateEmail: (name: string, email: string) => void
+  onUpdateRole: (name: string, role: PCRole) => void
   onRename: (oldName: string, newName: string) => void
   onRemove: (name: string) => void
   onMove:   (name: string, dir: 1 | -1) => void
@@ -20,9 +21,10 @@ function parseKeywords(v: string): string[] {
   return v.split(',').map(s => s.trim()).filter(Boolean)
 }
 
-export default function OwnerManager({ theme: t, open, owners, dirty, onAdd, onUpdateKeywords, onUpdateEmail, onRename, onRemove, onMove, onSave, onClose }: Props) {
+export default function OwnerManager({ theme: t, open, owners, dirty, onAdd, onUpdateKeywords, onUpdateEmail, onUpdateRole, onRename, onRemove, onMove, onSave, onClose }: Props) {
   const [newName, setNewName] = useState('')
   const [newKeywords, setNewKeywords] = useState('')
+  const [newRole, setNewRole] = useState<PCRole>('viewer')
   const [newEmail, setNewEmail] = useState('')
 
   if (!open) return null
@@ -128,18 +130,32 @@ export default function OwnerManager({ theme: t, open, owners, dirty, onAdd, onU
               <div style={{ fontSize: 11, color: t.sub, marginTop: 5, marginBottom: 8 }}>
                 A task naming one of these gets {o.name} auto-assigned as owner (if none is set yet).
               </div>
-              <label style={{ fontSize: 10.5, fontWeight: 800, color: t.sub, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-                Email (optional — enables the "Notify" button on their tasks)
-                <input
-                  type="email"
-                  defaultValue={o.email ?? ''}
-                  key={`${o.name}-email-${o.email ?? ''}`}
-                  placeholder="name@company.com"
-                  onBlur={e => onUpdateEmail(o.name, e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-                  style={{ ...inputStyle, marginTop: 5, fontWeight: 600, fontSize: 12 }}
-                />
-              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <label style={{ flex: 1, fontSize: 10.5, fontWeight: 800, color: t.sub, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                  Email (optional — enables "Notify")
+                  <input
+                    type="email"
+                    defaultValue={o.email ?? ''}
+                    key={`${o.name}-email-${o.email ?? ''}`}
+                    placeholder="name@company.com"
+                    onBlur={e => onUpdateEmail(o.name, e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                    style={{ ...inputStyle, marginTop: 5, fontWeight: 600, fontSize: 12 }}
+                  />
+                </label>
+                <label style={{ fontSize: 10.5, fontWeight: 800, color: t.sub, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                  Access
+                  <select
+                    value={o.role ?? 'viewer'}
+                    onChange={e => onUpdateRole(o.name, e.target.value as PCRole)}
+                    title="What the link in their Notify email grants them"
+                    style={{ ...inputStyle, marginTop: 5, fontWeight: 600, fontSize: 12, width: 'auto', cursor: 'pointer' }}
+                  >
+                    <option value="viewer">Viewer</option>
+                    <option value="editor">Editor</option>
+                  </select>
+                </label>
+              </div>
             </div>
           ))}
         </div>
@@ -160,19 +176,31 @@ export default function OwnerManager({ theme: t, open, owners, dirty, onAdd, onU
             placeholder="Keywords (optional, comma-separated)"
             style={{ ...inputStyle, marginBottom: 8 }}
           />
-          <input
-            type="email"
-            value={newEmail}
-            onChange={e => setNewEmail(e.target.value)}
-            placeholder="Email (optional)"
-            style={{ ...inputStyle, marginBottom: 10 }}
-          />
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+            <input
+              type="email"
+              value={newEmail}
+              onChange={e => setNewEmail(e.target.value)}
+              placeholder="Email (optional)"
+              style={{ ...inputStyle, flex: 1 }}
+            />
+            <select
+              value={newRole}
+              onChange={e => setNewRole(e.target.value as PCRole)}
+              title="What the link in their Notify email will grant them"
+              style={{ ...inputStyle, width: 'auto', cursor: 'pointer' }}
+            >
+              <option value="viewer">Viewer</option>
+              <option value="editor">Editor</option>
+            </select>
+          </div>
           <button
             onClick={() => {
               if (!newName.trim()) return
-              onAdd(newName, parseKeywords(newKeywords), newEmail)
+              onAdd(newName, parseKeywords(newKeywords), newEmail, newRole)
               setNewName('')
               setNewKeywords('')
+              setNewRole('viewer')
               setNewEmail('')
             }}
             disabled={!newName.trim()}

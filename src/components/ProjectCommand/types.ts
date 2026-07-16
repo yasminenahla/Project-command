@@ -28,6 +28,7 @@ export interface OwnerEntry {
   name:     string
   keywords: string[]  // if a task's name/notes/tags contain one of these, this owner is auto-suggested
   email?:   string     // lets the tracker offer a "Notify" mailto link for tasks assigned to this person
+  role?:    PCRole     // access level the "Notify" link grants this person — defaults to 'viewer' when unset
 }
 
 export interface PCTheme {
